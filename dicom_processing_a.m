@@ -1,11 +1,34 @@
 % restart
 close all; clear; clc;
 
-% base directory for DICOM images
-basePath = 'H:\CT\31584-008\CT 125797-125799 axial';
+% options
+doMakeVideo = 1;
 
-% text file with voxel coordinates of segmentation mask 
-segFile = 'H:\CT\31584-008\CT 125797-125799 axial\RK_grayvalues.txt';
+% base directory for DICOM images
+% basePath = 'H:\CT\31584-008\CT 125797-125799 axial';
+basePath = 'G:\CT\31584-007\CT 9871-9873';
+
+% slice locations to start and end
+% startSliceLoc = 1656.00; % inferior aspect of on L5
+% endSliceLoc = 1896.00; % superior aspect of T11
+startSliceLoc = -516.3; % inferior aspect of on L5
+endSliceLoc = -267.3; % superior aspect of T11
+
+% text file with voxel coordinates of segmentation mask
+segFiles = {...
+    'LK_grayvalues.txt', ... % LK
+    'RK_grayvalues.txt', ... % RK
+    'AA_grayvalues.txt', ... % AA
+    'IVC_grayvalues.txt', ... % IVC
+    };
+
+% define colors to use in masking...
+segColors = [ ...
+    0.00 1.00 0.00; ... % LK
+    0.00 1.00 0.00; ... % RK
+    1.00 0.33 0.33; ... % AA
+    0.33 0.33 1.00; ... % IVC
+    ];
 
 % extract list of DICOM files (all files w/o extensions)
 % ref: https://www.mathworks.com/matlabcentral/answers/431023-list-all-and-only-files-with-no-extension
@@ -14,89 +37,150 @@ allFilenames = {allFilesInDir.name};
 filesWithExtensionsMask = contains(allFilenames,'.');
 allFilenames(filesWithExtensionsMask) = [];
 
-% data storage
+%% determine z location of each slice
 fileData = [];
-allSegData = [];
-
-% determine z location of each slice
 for fileIdx = 1:length(allFilenames)
-   
     thisFileFullPath = [basePath '\' allFilenames{fileIdx}];
     dinf = dicominfo(thisFileFullPath);
     fileData(fileIdx,:) = [dinf.ImagePositionPatient(3)];
 end
 [fileData,sortOrder] = sortrows(fileData,1);
-fileData = [sortOrder fileData];   % [ fileIndex, DICOM slice #, Actual Z position in mm ]
+fileData = [sortOrder fileData];   % [ file index in allFilenames, actual Z position in mm ]
 
-% determine slice thickness
-% this can come from any of the DICOM files, so we just use the last one
+% crop to specified ROI
+sliceMask = (fileData(:,2) >= startSliceLoc) & (fileData(:,2) <= endSliceLoc);
+fileData(~sliceMask,:) = [];
+
+%% extract necessary image parameters
+% these can come from any of the DICOM files, so we'll just use the last
+% one that we opened
+% first, determine slice thickness
 sliceThk = dinf.SliceThickness;  % in mm
 
-% determine pixel spacing
+% now determine pixel spacing
 pixSpace = dinf.PixelSpacing;
 if(pixSpace(1) ~= pixSpace(2))
     error('Nonsquare pixels!');
 end
 pixSpace = pixSpace(1);
 
-% load segmentation data
-fid = fopen(segFile);
-segData = textscan(fid,'%f%f%f%f','Delimiter',',','CollectOutput',1);
-segData = segData{1};
-fclose(fid);
+% finally, coordinates of the upper left pixel
+% TODO: WE ASSUME THAT THIS IS CONSTANT FOR ENTIRE STACK!
+% subtract off half the pixel width to get the coordinates of the UL
+% corner
+% need to add one pixel to x direction for consistency with MIMICS, don't
+% entirely understand this yet?
+ulPixCoords = dinf.ImagePositionPatient(1:2)'-pixSpace/2 + [-1 0];
 
-% determine which slices we need
-segData(:,3) = segData(:,3)-sliceThk/2;
-sliceLocs = unique(segData(:,3),'stable');
-
-% extract DICOM images and pair with the segmentations
-for sliceIdx = 1:length(sliceLocs)
-   
-   % determine which DICOM image needs to be opened
-   sliceToFind = sliceLocs(sliceIdx);
-   thisFileIdxIdx = find(fileData(:,2) == sliceToFind);
-   if( isempty(thisFileIdxIdx) )
-       error('Slice not found!');
-   end
-   thisFileIdx = fileData(thisFileIdxIdx,1);
-   thisFileFullPath = [basePath '\' allFilenames{thisFileIdx}];
-   
-   % load and store DICOM image
-   img = dicomread(thisFileFullPath);
-   minVal = -199;
-   maxVal = 239;
-%    minVal = double(min(img(:)));
-%    maxVal = double(max(img(:)));
-   img8 = uint8((img-minVal)*(255/(maxVal-minVal)));   
-   allSegData(sliceIdx).img = img8;
-   
-   % store segmentation list
-   seglist = segData(segData(:,3) == sliceToFind,1:2);
-   allSegData(sliceIdx).seglist = seglist;
-   seglistIdx = round(seglist/pixSpace)+repmat([257 256],size(seglist,1),1); % not sure why the x direction is off by a pixel, but 257 aligns MATLAB output to view in Mimics
+%% load and adjust all segmentation data
+% segmentation z locations are taken on superior aspect of voxel
+% whereas slice z locations are taken at center of voxel
+% adjust all to be at center of voxel
+maskData = [];
+for segFileIdx = 1:length(segFiles)
     
-   % compute segmentation mask labels
-   imgLabels = uint8(zeros(size(img8)));
-   for segPointIdx = 1:size(seglistIdx,1)
-      imgLabels(seglistIdx(segPointIdx,2),seglistIdx(segPointIdx,1)) = 1;  % don't forget x is cols, y is rows!
-   end
-   allSegData(sliceIdx).labels = imgLabels;
-   
-   % generate masked image
-   maskedImg = uint8(zeros(size(img8,1),size(img8,2),3));
-   for layerIdx = 1:3
-       maskedImg(:,:,layerIdx) = img8.*uint8(~imgLabels);
-   end
-   maskedImg(:,:,1) = maskedImg(:,:,1) + 255*imgLabels;
-   allSegData(sliceIdx).maskedImg = maskedImg;
-   
+    fid = fopen([basePath '\' segFiles{segFileIdx}]);
+    thisSegData = textscan(fid,'%f%f%f%f','Delimiter',',','CollectOutput',1);
+    thisSegData = thisSegData{1};
+    fclose(fid);
+    
+    % determine which slices we need
+    maskData(segFileIdx).slices = unique(thisSegData(:,3),'stable');
+    
+    % save all data in structure
+    % [ voxelCtrZLocation, PixIdxX, PixIdxY ]
+    pixelLocs =  round((thisSegData(:,1:2) - repmat(ulPixCoords,size(thisSegData,1),1))/pixSpace);
+    maskData(segFileIdx).data = [thisSegData(:,3)-sliceThk/2 pixelLocs];
 end
 
+%% extract DICOM images and pair with the segmentations
+allSegData = [];
+for sliceIdx = 1:length(fileData)
+    
+    % get z location of this slice
+    thisZLoc = fileData(sliceIdx,2);
+    
+    % determine which DICOM image needs to be opened
+    thisFileIdx = fileData(sliceIdx,1);
+    thisFileFullPath = [basePath '\' allFilenames{thisFileIdx}];
+    
+    % load and store DICOM image and first rescale into HU
+    dinf = dicominfo(thisFileFullPath);
+    img = double(dicomread(thisFileFullPath))*dinf.RescaleSlope + dinf.RescaleIntercept;  % will need coversion to uint8 to be standardized!
+    
+    % rescale HU to grayscale based on a "pretty good" mapping identified in
+    % Mimics
+    minVal = -208;
+    maxVal = 218;
+    %    minVal = double(min(img(:)));
+    %    maxVal = double(max(img(:)));
+    img8 = uint8((img-minVal)*(255/(maxVal-minVal)));
+    allSegData(sliceIdx).img = img8;
+    
+    % initialize segmentation mask
+    seg_mask = zeros(size(img8));
+    
+    % prepare masked image
+    img8_masked = uint8(zeros(size(img8,1),size(img8,2),3));
+    for layerIdx = 1:3
+        img8_masked(:,:,layerIdx) = img8;
+    end
+    img8_masked_hsv = rgb2hsv(img8_masked);
+    
+    % generate overall segmentation mask for this slice
+    for maskIdx = 1:length(maskData)
+        
+        % get coordinates of pixels to mask
+        pixelLocs = maskData(maskIdx).data(maskData(maskIdx).data(:,1) == thisZLoc,2:3);
+        
+        % generate a mask for this image and this classification label
+        thisMask = zeros(size(seg_mask));
+        for pixelIdx = 1:size(pixelLocs,1)
+            thisMask( pixelLocs(pixelIdx,2), pixelLocs(pixelIdx,1)) = 1;
+        end
+        
+        % apply mask to overall mask
+        seg_mask(thisMask ~= 0) = maskIdx;
+        
+        % apply mask to masked image
+        thisColorHSV = rgb2hsv(segColors(maskIdx,:));
+    
+        % update hue and saturation
+        img8_masked_hsv(:,:,1) = img8_masked_hsv(:,:,1) + thisColorHSV(1)*thisMask;
+        img8_masked_hsv(:,:,2) = img8_masked_hsv(:,:,2) + thisColorHSV(2)*thisMask;
+        
+    end
+    
+    % store segmentation mask and the masked image
+    allSegData(sliceIdx).seg_mask = seg_mask;
+    allSegData(sliceIdx).img8_masked = hsv2rgb(img8_masked_hsv);
+    
+    
+    % store z location of this slice
+    allSegData(sliceIdx).z_loc = dinf.ImagePositionPatient(3);
+    
+end
+
+% produce animation and save if desired
 figure;
 for sliceIdx = 1:length(allSegData)
-    imshow( allSegData(sliceIdx).maskedImg );
+    imshow( allSegData(sliceIdx).img8_masked );
     axis equal;
-    title(sprintf('Slice Index %d @ %8.2f mm',sliceIdx,sliceLocs(sliceIdx)));
+    title(sprintf('Labeled Slice @ z = %8.2f mm',allSegData(sliceIdx).z_loc));
     drawnow;
-    pause(0.1);
+        
+    if(doMakeVideo)
+        thisImgFile = sprintf('frame%03d.png',sliceIdx);
+        saveas(gcf,thisImgFile);
+        system(['convert -trim ' thisImgFile ' ' thisImgFile]);  % REQUIRES convert FROM IMAGEMAGICK!
+    else
+        pause(0.1);
+    end
+    
+end
+
+% save animation as movie file
+if(doMakeVideo)
+    system(['ffmpeg -y -r 10 -start_number 1 -i frame%003d.png -vf scale="trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -profile:v high -pix_fmt yuv420p -g 25 -r 25 output.mp4']);
+    system('del frame*.png');
 end
