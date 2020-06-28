@@ -1,8 +1,24 @@
+% Test conversion of Mimics CT segmentation to two 3D arrays to serve as input to a CNN (U-Net?):
+%   * imageVolume: 512x512x128
+%   * labelVolume: 512x512x128
+% 
+% Once CT is segmented, in Mimics, right click on mask (or just in list of
+% masks) and choose "Export Grayvalues...". Export the files in HU (doesn't
+% really matter, but helpful for debugging), and save using conventions
+% shown below in segFiles cell array.
+%
+% Also provide startSliceLoc and endSliceLoc which are the z coordinates of
+% the center of the slice containing the inferior aspect of the L5 vertebrae
+% (start), and the superior aspect of the T11 vertabrae (end)
+%
+% Author:  M. Kokko
+% Created: 28-Jun-2020
+
 % restart
 close all; clear; clc;
 
 % options
-doMakeVideo = 1;
+doMakeVideo = 0;
 
 % base directory for DICOM images
 % basePath = 'H:\CT\31584-008\CT 125797-125799 axial';
@@ -11,7 +27,7 @@ basePath = 'G:\CT\31584-007\CT 9871-9873';
 % slice locations to start and end
 % startSliceLoc = 1656.00; % inferior aspect of on L5
 % endSliceLoc = 1896.00; % superior aspect of T11
-startSliceLoc = -516.3; % inferior aspect of on L5
+startSliceLoc = -516.3; % inferior aspect of on L5 (cite Fananapazir2019 for justification of L5 to T11 range)
 endSliceLoc = -267.3; % superior aspect of T11
 
 % text file with voxel coordinates of segmentation mask
@@ -152,21 +168,63 @@ for sliceIdx = 1:length(fileData)
     end
     
     % store segmentation mask and the masked image
+    allSegData(sliceIdx).img8 = img8;
     allSegData(sliceIdx).seg_mask = seg_mask;
     allSegData(sliceIdx).img8_masked = hsv2rgb(img8_masked_hsv);
-    
     
     % store z location of this slice
     allSegData(sliceIdx).z_loc = dinf.ImagePositionPatient(3);
     
 end
 
-% produce animation and save if desired
+%% now reslice to get a 512x512x128 voxel volume
+% this might not be the best approach...
+% ideally actual CT would be resliced and manually labeled
+% but we'll try a simple reslicing in MATLAB first...
+
+% make list of upper Z coordinate bounds for each slice
+sliceUpperBounds = [allSegData.z_loc]'+pixSpace/2;
+
+% generate new slice centers
+newSliceCenters = linspace(allSegData(1).z_loc,allSegData(end).z_loc,128)';
+
+% initialize data storage
+imageVolume = zeros(512,512,128);
+labelVolume = zeros(512,512,128);
+allSegDataResampled = [];
+
+% map image and label mask from original slicing
+% note: this does NOT interpolate!
+for newSliceIdx = 1:length(newSliceCenters)
+   newSliceLoc = newSliceCenters(newSliceIdx);
+   oldSliceToUse = find(sliceUpperBounds >= newSliceLoc,1,'first');
+   thisImage = allSegData(oldSliceToUse).img8;
+   thisMask = allSegData(oldSliceToUse).seg_mask;
+   thisMaskedImg = allSegData(oldSliceToUse).img8_masked;
+   
+   % add to 3D data structures
+   imageVolume(:,:,newSliceIdx) = thisImage;
+   labelVolume(:,:,newSliceIdx) = thisMask;
+   
+   % add to a MATLAB struct for display
+   allSegDataResampled(newSliceIdx).img8 = thisImage;
+   allSegDataResampled(newSliceIdx).img8_masked = thisMaskedImg ;
+   allSegDataResampled(newSliceIdx).seg_mask = thisMask;
+   allSegDataResampled(newSliceIdx).z_loc = newSliceLoc;   
+end
+
+%% produce animation and save video if desired
+
+% choose data to show
+dispData = allSegData;
+% dispData = allSegDataResampled;
+
+% show each slice
 figure;
-for sliceIdx = 1:length(allSegData)
-    imshow( allSegData(sliceIdx).img8_masked );
+for sliceIdx = 1:length(dispData)
+    imshow( dispData(sliceIdx).img8_masked );
     axis equal;
-    title(sprintf('Labeled Slice @ z = %8.2f mm',allSegData(sliceIdx).z_loc));
+    title(sprintf('Labeled Slice @ z = %8.2f mm',dispData(sliceIdx).z_loc));
     drawnow;
         
     if(doMakeVideo)
