@@ -18,17 +18,27 @@
 close all; clear; clc;
 
 % options
-doMakeVideo = 0;
+doMakeVideo = 1;
 
-% base directory for DICOM images
-% basePath = 'H:\CT\31584-008\CT 125797-125799 axial';
-basePath = 'G:\CT\31584-007\CT 9871-9873';
+% location of datasets along with start and end Z positions
+% as defined by inferoior aspect of L5 (start), and superior aspect of T11
+% (end); Cite Fananapazir2019 for justification of this range
+dataSets = {
+    'H:\CT\31584-001',-1415,-1180; % 31584-001
+    'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44;
+    'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
+    'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
+    'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
+    'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
+    'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
+    'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
+    };
 
-% slice locations to start and end
-% startSliceLoc = 1656.00; % inferior aspect of on L5
-% endSliceLoc = 1896.00; % superior aspect of T11
-startSliceLoc = -516.3; % inferior aspect of on L5 (cite Fananapazir2019 for justification of L5 to T11 range)
-endSliceLoc = -267.3; % superior aspect of T11
+dataIdx = 2;
+
+basePath = dataSets{dataIdx,1};
+startSliceLoc = dataSets{dataIdx,2};
+endSliceLoc = dataSets{dataIdx,3};
 
 % text file with voxel coordinates of segmentation mask
 segFiles = {...
