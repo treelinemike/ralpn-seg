@@ -258,8 +258,17 @@ end
 
 %% extract some slices for testing U-Net
 % also show raw image, classification mask, and masked image
-startFrame = 48;
-endFrame = 75;
+% 31584-001: 14-27
+% 31584-002: 95-193
+% 31584-003: 130-222
+% 31584-004: 19-25
+% 31584-005: 11-34
+% 31584-006: 140-235
+% 31584-007: 21-41
+% 31584-008: 20-29
+
+startFrame = 20;
+endFrame = 29;
 ralpnData2D.image = zeros(512,512,(endFrame-startFrame)+1);
 ralpnData2D.label = zeros(512,512,(endFrame-startFrame)+1);
 
@@ -267,8 +276,10 @@ figure;
 set(gcf,'Position',[0169 0204 1375 0460]);
 for sliceIdx = startFrame:endFrame
     
-    thisImage = imageVolume(:,:,sliceIdx);
-    thisMask = labelVolume(:,:,sliceIdx);
+%     thisImage = imageVolume(:,:,sliceIdx);
+%     thisMask = labelVolume(:,:,sliceIdx);
+    thisImage = allSegData(sliceIdx).img8;
+    thisMask = allSegData(sliceIdx).seg_mask;
     
     % generate masked image
     % yes... we've already done this...
