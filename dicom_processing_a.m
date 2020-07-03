@@ -1,7 +1,7 @@
 % Test conversion of Mimics CT segmentation to two 3D arrays to serve as input to a CNN (U-Net?):
 %   * imageVolume: 512x512x128
 %   * labelVolume: 512x512x128
-% 
+%
 % Once CT is segmented, in Mimics, right click on mask (or just in list of
 % masks) and choose "Export Grayvalues...". Export the files in HU (doesn't
 % really matter, but helpful for debugging), and save using conventions
@@ -50,18 +50,12 @@ segFiles = {...
 
 % define colors to use in masking...
 segColors = [ ...
-    0.00 1.00 0.00; ... % LK
+    0.00 0.00 0.00; ... % background class
+    1.00 0.75 0.00; ... % LK
     0.00 1.00 0.00; ... % RK
     1.00 0.33 0.33; ... % AA
     0.33 0.33 1.00; ... % IVC
     ];
-
-% colormap for indexed mask images
-% need to increment mask by 1, lets
-% zeros in raw mask map to 0
-% also paints left kidney orange to distinguish
-% from right kidney
-imgColorMap = [0,0,0; 1 0.75 0; segColors(2:end,:)];
 
 % extract list of DICOM files (all files w/o extensions)
 % ref: https://www.mathworks.com/matlabcentral/answers/431023-list-all-and-only-files-with-no-extension
@@ -177,8 +171,8 @@ for sliceIdx = 1:length(fileData)
         seg_mask(thisMask ~= 0) = maskIdx;
         
         % apply mask to masked image
-        thisColorHSV = rgb2hsv(segColors(maskIdx,:));
-    
+        thisColorHSV = rgb2hsv(segColors(maskIdx+1,:));
+        
         % update hue and saturation
         img8_masked_hsv(:,:,1) = img8_masked_hsv(:,:,1) + thisColorHSV(1)*thisMask;
         img8_masked_hsv(:,:,2) = img8_masked_hsv(:,:,2) + thisColorHSV(2)*thisMask;
@@ -214,21 +208,21 @@ allSegDataResampled = [];
 % map image and label mask from original slicing
 % note: this does NOT interpolate!
 for newSliceIdx = 1:length(newSliceCenters)
-   newSliceLoc = newSliceCenters(newSliceIdx);
-   oldSliceToUse = find(sliceUpperBounds >= newSliceLoc,1,'first');
-   thisImage = allSegData(oldSliceToUse).img8;
-   thisMask = allSegData(oldSliceToUse).seg_mask;
-   thisMaskedImg = allSegData(oldSliceToUse).img8_masked;
-   
-   % add to 3D data structures
-   imageVolume(:,:,newSliceIdx) = thisImage;
-   labelVolume(:,:,newSliceIdx) = thisMask;
-   
-   % add to a MATLAB struct for display
-   allSegDataResampled(newSliceIdx).img8 = thisImage;
-   allSegDataResampled(newSliceIdx).img8_masked = thisMaskedImg ;
-   allSegDataResampled(newSliceIdx).seg_mask = thisMask;
-   allSegDataResampled(newSliceIdx).z_loc = newSliceLoc;   
+    newSliceLoc = newSliceCenters(newSliceIdx);
+    oldSliceToUse = find(sliceUpperBounds >= newSliceLoc,1,'first');
+    thisImage = allSegData(oldSliceToUse).img8;
+    thisMask = allSegData(oldSliceToUse).seg_mask;
+    thisMaskedImg = allSegData(oldSliceToUse).img8_masked;
+    
+    % add to 3D data structures
+    imageVolume(:,:,newSliceIdx) = thisImage;
+    labelVolume(:,:,newSliceIdx) = thisMask;
+    
+    % add to a MATLAB struct for display
+    allSegDataResampled(newSliceIdx).img8 = thisImage;
+    allSegDataResampled(newSliceIdx).img8_masked = thisMaskedImg ;
+    allSegDataResampled(newSliceIdx).seg_mask = thisMask;
+    allSegDataResampled(newSliceIdx).z_loc = newSliceLoc;
 end
 
 %% produce animation and save video if desired
@@ -244,7 +238,7 @@ for sliceIdx = 1:length(dispData)
     axis equal;
     title(sprintf('Labeled Slice @ z = %8.2f mm',dispData(sliceIdx).z_loc));
     drawnow;
-        
+    
     if(doMakeVideo)
         thisImgFile = sprintf('frame%03d.png',sliceIdx);
         saveas(gcf,thisImgFile);
@@ -263,25 +257,55 @@ end
 
 
 %% extract some slices for testing U-Net
+% also show raw image, classification mask, and masked image
 startFrame = 48;
 endFrame = 75;
 ralpnData2D.image = zeros(512,512,(endFrame-startFrame)+1);
 ralpnData2D.label = zeros(512,512,(endFrame-startFrame)+1);
 
 figure;
-set(gcf,'Position',[0253 0470 1030 0420]);
+set(gcf,'Position',[0169 0204 1375 0460]);
 for sliceIdx = startFrame:endFrame
     
     thisImage = imageVolume(:,:,sliceIdx);
-    thisLabel = labelVolume(:,:,sliceIdx);
+    thisMask = labelVolume(:,:,sliceIdx);
     
-    subplot(1,2,1); 
-    imshow(thisImage,[]); 
-    subplot(1,2,2); 
-    imshow(thisLabel+1,imgColorMap);
+    % generate masked image
+    % yes... we've already done this...
+    img8 = uint8(zeros(size(thisImage,1),size(thisImage,1),3));
+    for i = 1:3
+       img8(:,:,i) = thisImage; 
+    end
+    img8_masked_hsv = rgb2hsv(img8);
+    allLabels = unique(thisMask(:));
+    for labelIdx = 1:length(allLabels)
+        
+        thisLabel = allLabels(labelIdx);
+        if(thisLabel ~= 0)
+            
+            % apply mask to masked image
+            thisLabelMask = (thisMask == thisLabel);
+            thisColorHSV = rgb2hsv(segColors(thisLabel+1,:));
+            img8_masked_hsv(:,:,1) = img8_masked_hsv(:,:,1) + thisColorHSV(1)*thisLabelMask;
+            img8_masked_hsv(:,:,2) = img8_masked_hsv(:,:,2) + thisColorHSV(2)*thisLabelMask;
+        end
+    end
+    img8_masked = hsv2rgb(img8_masked_hsv);
+    
+    subplot(1,3,1);
+    imshow(thisImage,[]);
+    title('\bfRaw Image');
+    
+    subplot(1,3,2);
+    imshow(thisMask+1,segColors);
+    title('\bfClassification Mask');
+    
+    subplot(1,3,3);
+    imshow(img8_masked);
+    title('\bfMasked Image');
     
     ralpnData2D.image(:,:,sliceIdx) = thisImage;
-    ralpnData2D.label(:,:,sliceIdx) = thisLabel;
+    ralpnData2D.label(:,:,sliceIdx) = thisMask;
     
     pause(0.1);
 end
