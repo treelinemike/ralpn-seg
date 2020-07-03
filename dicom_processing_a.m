@@ -18,7 +18,7 @@
 close all; clear; clc;
 
 % options
-doMakeVideo = 1;
+doMakeVideo = 0;
 
 % location of datasets along with start and end Z positions
 % as defined by inferoior aspect of L5 (start), and superior aspect of T11
@@ -34,7 +34,7 @@ dataSets = {
     'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
     };
 
-dataIdx = 2;
+dataIdx = 8;
 
 basePath = dataSets{dataIdx,1};
 startSliceLoc = dataSets{dataIdx,2};
@@ -56,6 +56,13 @@ segColors = [ ...
     0.33 0.33 1.00; ... % IVC
     ];
 
+% colormap for indexed mask images
+% need to increment mask by 1, lets
+% zeros in raw mask map to 0
+% also paints left kidney orange to distinguish
+% from right kidney
+imgColorMap = [0,0,0; 1 0.75 0; segColors(2:end,:)];
+
 % extract list of DICOM files (all files w/o extensions)
 % ref: https://www.mathworks.com/matlabcentral/answers/431023-list-all-and-only-files-with-no-extension
 allFilesInDir = dir(basePath);
@@ -68,7 +75,7 @@ fileData = [];
 for fileIdx = 1:length(allFilenames)
     thisFileFullPath = [basePath '\' allFilenames{fileIdx}];
     dinf = dicominfo(thisFileFullPath);
-    fileData(fileIdx,:) = [dinf.ImagePositionPatient(3)];
+    fileData(fileIdx,:) = [dinf.ImagePositionPatient(3)];  % dinf.ImagePositionPatient(3) and dinf.SliceLocation should be identical!
 end
 [fileData,sortOrder] = sortrows(fileData,1);
 fileData = [sortOrder fileData];   % [ file index in allFilenames, actual Z position in mm ]
@@ -80,8 +87,9 @@ fileData(~sliceMask,:) = [];
 %% extract necessary image parameters
 % these can come from any of the DICOM files, so we'll just use the last
 % one that we opened
-% first, determine slice thickness
-sliceThk = dinf.SliceThickness;  % in mm
+% first, determine slice SPACING (we don't want thickness here)
+sliceSpacing = mean(diff(fileData(:,2)));
+% sliceThk = dinf.SliceThickness;  % in mm
 
 % now determine pixel spacing
 pixSpace = dinf.PixelSpacing;
@@ -116,7 +124,7 @@ for segFileIdx = 1:length(segFiles)
     % save all data in structure
     % [ voxelCtrZLocation, PixIdxX, PixIdxY ]
     pixelLocs =  round((thisSegData(:,1:2) - repmat(ulPixCoords,size(thisSegData,1),1))/pixSpace);
-    maskData(segFileIdx).data = [thisSegData(:,3)-sliceThk/2 pixelLocs];
+    maskData(segFileIdx).data = [thisSegData(:,3)-sliceSpacing/2 pixelLocs];
 end
 
 %% extract DICOM images and pair with the segmentations
@@ -157,7 +165,7 @@ for sliceIdx = 1:length(fileData)
     for maskIdx = 1:length(maskData)
         
         % get coordinates of pixels to mask
-        pixelLocs = maskData(maskIdx).data(maskData(maskIdx).data(:,1) == thisZLoc,2:3);
+        pixelLocs = maskData(maskIdx).data(  abs(maskData(maskIdx).data(:,1) - thisZLoc) < 0.1 ,2:3);
         
         % generate a mask for this image and this classification label
         thisMask = zeros(size(seg_mask));
@@ -252,3 +260,30 @@ if(doMakeVideo)
     system(['ffmpeg -y -r 10 -start_number 1 -i frame%003d.png -vf scale="trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -profile:v high -pix_fmt yuv420p -g 25 -r 25 output.mp4']);
     system('del frame*.png');
 end
+
+
+%% extract some slices for testing U-Net
+startFrame = 48;
+endFrame = 75;
+ralpnData2D.image = zeros(512,512,(endFrame-startFrame)+1);
+ralpnData2D.label = zeros(512,512,(endFrame-startFrame)+1);
+
+figure;
+set(gcf,'Position',[0253 0470 1030 0420]);
+for sliceIdx = startFrame:endFrame
+    
+    thisImage = imageVolume(:,:,sliceIdx);
+    thisLabel = labelVolume(:,:,sliceIdx);
+    
+    subplot(1,2,1); 
+    imshow(thisImage,[]); 
+    subplot(1,2,2); 
+    imshow(thisLabel+1,imgColorMap);
+    
+    ralpnData2D.image(:,:,sliceIdx) = thisImage;
+    ralpnData2D.label(:,:,sliceIdx) = thisLabel;
+    
+    pause(0.1);
+end
+save(sprintf('ralpnData2D_%03d.mat',dataIdx),'ralpnData2D');
+
