@@ -34,7 +34,7 @@ dataSets = {
     'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
     };
 
-dataIdx = 8;
+dataIdx = 1;
 
 basePath = dataSets{dataIdx,1};
 startSliceLoc = dataSets{dataIdx,2};
@@ -267,13 +267,15 @@ end
 % 31584-007: 21-41
 % 31584-008: 20-29
 
-startFrame = 20;
-endFrame = 29;
-ralpnData2D.image = zeros(512,512,(endFrame-startFrame)+1);
-ralpnData2D.label = zeros(512,512,(endFrame-startFrame)+1);
+startFrame = 14;
+endFrame = 27;
+numFrames = (endFrame-startFrame)+1;
+ralpnData2D.image = uint8(zeros(512,512,numFrames));
+ralpnData2D.label = uint8(zeros(512,512,numFrames));
 
 figure;
 set(gcf,'Position',[0169 0204 1375 0460]);
+frameCount = 1;
 for sliceIdx = startFrame:endFrame
     
 %     thisImage = imageVolume(:,:,sliceIdx);
@@ -315,9 +317,9 @@ for sliceIdx = startFrame:endFrame
     imshow(img8_masked);
     title('\bfMasked Image');
     
-    ralpnData2D.image(:,:,sliceIdx) = thisImage;
-    ralpnData2D.label(:,:,sliceIdx) = thisMask;
-    
+    ralpnData2D.image(:,:,frameCount) = thisImage;
+    ralpnData2D.label(:,:,frameCount) = thisMask;
+    frameCount = frameCount + 1;
     pause(0.1);
 end
 save(sprintf('ralpnData2D_%03d.mat',dataIdx),'ralpnData2D');
