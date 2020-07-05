@@ -19,7 +19,9 @@ close all; clear; clc;
 
 % options
 doMakeVideo = 0;
-
+minHUScaleVal = -208;
+maxHUScaleVal = 218;
+    
 % location of datasets along with start and end Z positions
 % as defined by inferoior aspect of L5 (start), and superior aspect of T11
 % (end); Cite Fananapazir2019 for justification of this range
@@ -34,7 +36,7 @@ dataSets = {
     'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
     };
 
-dataIdx = 1;
+dataIdx = 8;
 
 basePath = dataSets{dataIdx,1};
 startSliceLoc = dataSets{dataIdx,2};
@@ -98,7 +100,7 @@ pixSpace = pixSpace(1);
 % corner
 % need to add one pixel to x direction for consistency with MIMICS, don't
 % entirely understand this yet?
-ulPixCoords = dinf.ImagePositionPatient(1:2)'-pixSpace/2 + [0 0];
+ulPixCoords = dinf.ImagePositionPatient(1:2)'-pixSpace/2 + [-1 0]*pixSpace;
 
 %% load and adjust all segmentation data
 % segmentation z locations are taken on superior aspect of voxel
@@ -138,11 +140,7 @@ for sliceIdx = 1:length(fileData)
     
     % rescale HU to grayscale based on a "pretty good" mapping identified in
     % Mimics
-    minVal = -208;
-    maxVal = 218;
-    %    minVal = double(min(img(:)));
-    %    maxVal = double(max(img(:)));
-    img8 = uint8((img-minVal)*(255/(maxVal-minVal)));
+    img8 = uint8((img-minHUScaleVal)*(255/(maxHUScaleVal-minHUScaleVal)));
     allSegData(sliceIdx).img = img8;
     
     % initialize segmentation mask
@@ -246,7 +244,6 @@ for sliceIdx = 1:length(dispData)
     else
         pause(0.1);
     end
-    
 end
 
 % save animation as movie file
@@ -267,8 +264,8 @@ end
 % 31584-007: 21-41
 % 31584-008: 20-29
 
-startFrame = 14;
-endFrame = 27;
+startFrame = 20;
+endFrame = 29;
 numFrames = (endFrame-startFrame)+1;
 ralpnData2D.image = uint8(zeros(512,512,numFrames));
 ralpnData2D.label = uint8(zeros(512,512,numFrames));
