@@ -98,7 +98,7 @@ pixSpace = pixSpace(1);
 % corner
 % need to add one pixel to x direction for consistency with MIMICS, don't
 % entirely understand this yet?
-ulPixCoords = dinf.ImagePositionPatient(1:2)'-pixSpace/2 + [-1 0];
+ulPixCoords = dinf.ImagePositionPatient(1:2)'-pixSpace/2 + [0 0];
 
 %% load and adjust all segmentation data
 % segmentation z locations are taken on superior aspect of voxel
