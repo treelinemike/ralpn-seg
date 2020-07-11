@@ -6,7 +6,7 @@ basePath = '.';
 fileList = 	cellstr(ls([basePath '/' 'ralpnData2D_*.mat']));
 
 mkdir('./image/');
-mkdir('./label/');
+mkdir('./seg_mask/');
 
 for fileIdx = 1:length(fileList)
     thisFileName = fileList{fileIdx};
@@ -18,8 +18,8 @@ for fileIdx = 1:length(fileList)
         image = repmat(ralpnData2D.image(:,:,exampIdx),1,1,3);
         label = repmat(ralpnData2D.label(:,:,exampIdx),1,1,3);
         imageFile = sprintf('%03d_%03d_image.png',ctIdx,exampIdx);
-        labelFile = sprintf('%03d_%03d_label.png',ctIdx,exampIdx);
+        labelFile = sprintf('%03d_%03d_seg_mask.png',ctIdx,exampIdx);
         imwrite(uint8(image),[basePath '/image/' imageFile]);
-        imwrite(uint8(label),[basePath '/label/' labelFile]);
+        imwrite(uint8(label),[basePath '/seg_mask/' labelFile]);
     end
 end
