@@ -32,7 +32,7 @@ if( size(headerInfo.data,3) ~= size(ralpnData2D.image,3))
 end
 
 figure;
-
+set(gcf,'Position',[0089 2.194000e+02 1.404800e+03 4.064000e+02]);
 for frameIdx = 1:size(headerInfo.data,3)
     thisFrame = headerInfo.data(:,:,frameIdx);
     subplot(1,3,1);
