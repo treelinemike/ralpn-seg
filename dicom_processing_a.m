@@ -21,11 +21,12 @@ close all; clear; clc;
 doMakeVideo = 0;
 minHUScaleVal = -208;
 maxHUScaleVal = 218;
-    
+
 % location of datasets along with start and end Z positions
 % as defined by inferoior aspect of L5 (start), and superior aspect of T11
 % (end); Cite Fananapazir2019 for justification of this range
 dataSets = {
+%     'H:\CT\31584-001',-2600,-1165; % 31584-001_full file!!
     'H:\CT\31584-001',-1415,-1180; % 31584-001
     'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44;
     'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
@@ -36,7 +37,8 @@ dataSets = {
     'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
     };
 
-dataIdx = 8;
+% which file should we use right now?
+dataIdx = 1;
 
 basePath = dataSets{dataIdx,1};
 startSliceLoc = dataSets{dataIdx,2};
@@ -146,7 +148,7 @@ for sliceIdx = 1:length(fileData)
     % initialize segmentation mask
     seg_mask = zeros(size(img8));
     
-    % prepare masked image
+    % prepare segmentation mask
     img8_masked = uint8(zeros(size(img8,1),size(img8,2),3));
     for layerIdx = 1:3
         img8_masked(:,:,layerIdx) = img8;
@@ -167,20 +169,14 @@ for sliceIdx = 1:length(fileData)
         
         % apply mask to overall mask
         seg_mask(thisMask ~= 0) = maskIdx;
-        
-        % apply mask to masked image
-        thisColorHSV = rgb2hsv(segColors(maskIdx+1,:));
-        
-        % update hue and saturation
-        img8_masked_hsv(:,:,1) = img8_masked_hsv(:,:,1) + thisColorHSV(1)*thisMask;
-        img8_masked_hsv(:,:,2) = img8_masked_hsv(:,:,2) + thisColorHSV(2)*thisMask;
-        
     end
     
     % store segmentation mask and the masked image
     allSegData(sliceIdx).img8 = img8;
     allSegData(sliceIdx).seg_mask = seg_mask;
-    allSegData(sliceIdx).img8_masked = hsv2rgb(img8_masked_hsv);
+    
+    % compute the masked image
+    allSegData(sliceIdx).img8_masked = maskImage(img8,seg_mask,segColors);
     
     % store z location of this slice
     allSegData(sliceIdx).z_loc = dinf.ImagePositionPatient(3);
@@ -263,9 +259,11 @@ end
 % 31584-006: 140-235
 % 31584-007: 21-41
 % 31584-008: 20-29
-
-startFrame = 20;
-endFrame = 29;
+% 
+% startFrame = 1;
+% endFrame = length(allSegData);
+startFrame = 14;
+endFrame = 27;
 numFrames = (endFrame-startFrame)+1;
 ralpnData2D.image = uint8(zeros(512,512,numFrames));
 ralpnData2D.label = uint8(zeros(512,512,numFrames));
@@ -275,32 +273,11 @@ set(gcf,'Position',[0169 0204 1375 0460]);
 frameCount = 1;
 for sliceIdx = startFrame:endFrame
     
-%     thisImage = imageVolume(:,:,sliceIdx);
-%     thisMask = labelVolume(:,:,sliceIdx);
+    %     thisImage = imageVolume(:,:,sliceIdx);
+    %     thisMask = labelVolume(:,:,sliceIdx);
     thisImage = allSegData(sliceIdx).img8;
     thisMask = allSegData(sliceIdx).seg_mask;
-    
-    % generate masked image
-    % yes... we've already done this...
-    img8 = uint8(zeros(size(thisImage,1),size(thisImage,1),3));
-    for i = 1:3
-       img8(:,:,i) = thisImage; 
-    end
-    img8_masked_hsv = rgb2hsv(img8);
-    allLabels = unique(thisMask(:));
-    for labelIdx = 1:length(allLabels)
-        
-        thisLabel = allLabels(labelIdx);
-        if(thisLabel ~= 0)
-            
-            % apply mask to masked image
-            thisLabelMask = (thisMask == thisLabel);
-            thisColorHSV = rgb2hsv(segColors(thisLabel+1,:));
-            img8_masked_hsv(:,:,1) = img8_masked_hsv(:,:,1) + thisColorHSV(1)*thisLabelMask;
-            img8_masked_hsv(:,:,2) = img8_masked_hsv(:,:,2) + thisColorHSV(2)*thisLabelMask;
-        end
-    end
-    img8_masked = hsv2rgb(img8_masked_hsv);
+    img8_masked = maskImage(thisImage,thisMask,segColors);
     
     subplot(1,3,1);
     imshow(thisImage,[]);
@@ -320,4 +297,3 @@ for sliceIdx = startFrame:endFrame
     pause(0.1);
 end
 save(sprintf('ralpnData2D_%03d.mat',dataIdx),'ralpnData2D');
-
