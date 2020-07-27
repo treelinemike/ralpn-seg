@@ -51,7 +51,7 @@ for frameIdx = 1:size(headerInfo.data,3)
 
     subplot(1,3,3);
     cla
-    diffMask = double(mimicsMask > 0) - double(slicerMask > 0);
+    diffMask = double(mimicsMask > 0 & mimicsMask < 3) - double(slicerMask > 0);
     diffMask( diffMask == -1 ) = 2;
     diffMask = uint8(diffMask);
     imshow(maskImage(ralpnData2D.image(:,:,frameIdx),diffMask,segColorsDiff));  % NOTE THE TRANSPOSE!!!
