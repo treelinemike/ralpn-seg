@@ -11,6 +11,10 @@
 % the center of the slice containing the inferior aspect of the L5 vertebrae
 % (start), and the superior aspect of the T11 vertabrae (end)
 %
+% Script also writes a segmentation *.nrrd file which can be loaded (along
+% with the corresponding DICOM stack) into 3D Slicer 4.11.0 or newer. Note
+% that this requires NRRD/NHDR R/W from MATLAB File Exchange: https://www.mathworks.com/matlabcentral/fileexchange/66645-nrrd-nhdr-reader-and-writer
+%
 % Author:  M. Kokko
 % Created: 28-Jun-2020
 
@@ -182,6 +186,41 @@ for sliceIdx = 1:length(fileData)
     allSegData(sliceIdx).z_loc = dinf.ImagePositionPatient(3);
     
 end
+
+%% generate and export segmentation
+segData = uint8(zeros(512,512, length(allSegData) ));
+for i = 1:length(allSegData)
+    segData(:,:,i) = allSegData(i).seg_mask;  % NOT TRANSPOSED YET, DO THIS LATER
+end
+delta_x = dinf.PixelSpacing(1);
+delta_y = dinf.PixelSpacing(2);
+delta_z = sliceSpacing;
+spaceDir = [delta_x delta_y delta_z];
+spaceDirMat = diag(spaceDir);
+
+
+% write to file
+% note: requires Slicer 4.11.0 or newer (loading nrrd crashes for Slicer
+% 4.10.0, see:
+% https://discourse.slicer.org/t/segment-editor-crashes-on-loaded-segments/9294/3)
+headerInfo_new.content = 'matlab_export';
+headerInfo_new.data = permute(segData,[2 1 3]);  % note permute does transpose! see: https://www.mathworks.com/matlabcentral/answers/162418-3-d-matrix-transpose
+headerInfo_new.type = 'uint8';
+headerInfo_new.dimension = 3;
+headerInfo_new.space = 'left-posterior-superior';
+headerInfo_new.sizes = size(segData);
+for i = 1:3 
+    headerInfo_new.spacedirections{i} = sprintf('(%19.17f,%19.17f,%19.17f)',spaceDirMat(:,i));
+end
+headerInfo_new.spacedirections_matrix = spaceDirMat;
+headerInfo_new.kinds = {'domain'  'domain'  'domain'};
+headerInfo_new.endian = 'little';
+headerInfo_new.encoding = 'gzip';
+headerInfo_new.spaceorigin = dinf.ImagePositionPatient;  % TODO UPDATE Z POSITION FOR STARTING SLICE!
+headerInfo_new.spaceorigin(3) = fileData(1,2);
+exportFilename = sprintf('seg_export_%03d.nrrd',dataIdx);
+nhdr_nrrd_write(exportFilename, headerInfo_new, true);
+disp(['Wrote ' sprintf('seg_export_%03d.nrrd',dataIdx)]);
 
 %% now reslice to get a 512x512x128 voxel volume
 % this might not be the best approach...
