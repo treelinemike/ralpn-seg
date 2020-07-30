@@ -23,6 +23,10 @@ close all; clear; clc;
 
 % options
 doMakeVideo = 0;
+doAnimate = 0;
+doReslice = 0;
+doSaveNRRD = 1;
+doUNetExtract = 0;
 minHUScaleVal = -208;
 maxHUScaleVal = 218;
 
@@ -42,8 +46,8 @@ dataSets = {
     };
 
 % which file should we use right now?
-dataIdx = 1;
-
+% dataIdx = 2;
+for dataIdx = 1:length(dataSets)
 basePath = dataSets{dataIdx,1};
 startSliceLoc = dataSets{dataIdx,2};
 endSliceLoc = dataSets{dataIdx,3};
@@ -200,6 +204,7 @@ spaceDirMat = diag(spaceDir);
 
 
 % write to file
+if(doSaveNRRD)
 % note: requires Slicer 4.11.0 or newer (loading nrrd crashes for Slicer
 % 4.10.0, see:
 % https://discourse.slicer.org/t/segment-editor-crashes-on-loaded-segments/9294/3)
@@ -221,12 +226,13 @@ headerInfo_new.spaceorigin(3) = fileData(1,2);
 exportFilename = sprintf('seg_export_%03d.nrrd',dataIdx);
 nhdr_nrrd_write(exportFilename, headerInfo_new, true);
 disp(['Wrote ' sprintf('seg_export_%03d.nrrd',dataIdx)]);
+end
 
 %% now reslice to get a 512x512x128 voxel volume
 % this might not be the best approach...
 % ideally actual CT would be resliced and manually labeled
 % but we'll try a simple reslicing in MATLAB first...
-
+if(doReslice)
 % make list of upper Z coordinate bounds for each slice
 sliceUpperBounds = [allSegData.z_loc]'+pixSpace/2;
 
@@ -257,9 +263,10 @@ for newSliceIdx = 1:length(newSliceCenters)
     allSegDataResampled(newSliceIdx).seg_mask = thisMask;
     allSegDataResampled(newSliceIdx).z_loc = newSliceLoc;
 end
+end
 
 %% produce animation and save video if desired
-
+if(doAnimate)
 % choose data to show
 dispData = allSegData;
 % dispData = allSegDataResampled;
@@ -286,9 +293,10 @@ if(doMakeVideo)
     system(['ffmpeg -y -r 10 -start_number 1 -i frame%003d.png -vf scale="trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -profile:v high -pix_fmt yuv420p -g 25 -r 25 output.mp4']);
     system('del frame*.png');
 end
-
+end
 
 %% extract some slices for testing U-Net
+if(doUNetExtract)
 % also show raw image, classification mask, and masked image
 % 31584-001: 14-27
 % 31584-002: 95-193
@@ -336,3 +344,6 @@ for sliceIdx = startFrame:endFrame
     pause(0.1);
 end
 save(sprintf('ralpnData2D_%03d.mat',dataIdx),'ralpnData2D');
+end
+
+end
