@@ -307,10 +307,10 @@ if(doUNetExtract)
 % 31584-007: 21-41
 % 31584-008: 20-29
 % 
-% startFrame = 1;
-% endFrame = length(allSegData);
-startFrame = 14;
-endFrame = 27;
+startFrame = 1;
+endFrame = length(allSegData);
+% startFrame = 14;
+% endFrame = 27;
 numFrames = (endFrame-startFrame)+1;
 ralpnData2D.image = uint8(zeros(512,512,numFrames));
 ralpnData2D.label = uint8(zeros(512,512,numFrames));
