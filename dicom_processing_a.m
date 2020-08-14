@@ -36,7 +36,7 @@ maxHUScaleVal = 218;
 % (end); Cite Fananapazir2019 for justification of this range
 dataSets = {
 %     'H:\CT\31584-001',-2600,-1165; % 31584-001_full file!!
-    'H:\CT\31584-001',-1415,-1180; % 31584-001
+%     'H:\CT\31584-001',-1415,-1180; % 31584-001
     'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44;
     'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
     'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
@@ -366,4 +366,5 @@ end
 
 % compute class weights
 % classCounts = [366699177; 1515535; 1623015; 613105; 745072]; % from cases 1-10
+% from cases 2-10 (saving 1 for final check)
 w = (1./classCounts)/sum(1./classCounts)
