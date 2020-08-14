@@ -25,8 +25,9 @@ close all; clear; clc;
 doMakeVideo = 0;
 doAnimate = 0;
 doReslice = 0;
-doSaveNRRD = 1;
+doSaveNRRD = 0;
 doUNetExtract = 0;
+doShowUNetImages = 0;
 minHUScaleVal = -208;
 maxHUScaleVal = 218;
 
@@ -43,14 +44,9 @@ dataSets = {
     'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
     'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
     'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
+    'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
+    'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
     };
-
-% which file should we use right now?
-% dataIdx = 2;
-for dataIdx = 1:length(dataSets)
-basePath = dataSets{dataIdx,1};
-startSliceLoc = dataSets{dataIdx,2};
-endSliceLoc = dataSets{dataIdx,3};
 
 % text file with voxel coordinates of segmentation mask
 segFiles = {...
@@ -68,6 +64,16 @@ segColors = [ ...
     1.00 0.33 0.33; ... % AA
     0.33 0.33 1.00; ... % IVC
     ];
+
+% storage for number of pixels in each class
+classCounts = zeros(size(segColors,1),1);
+
+% which file should we use right now?
+% dataIdx = 2;
+for dataIdx = 1:length(dataSets)
+basePath = dataSets{dataIdx,1};
+startSliceLoc = dataSets{dataIdx,2};
+endSliceLoc = dataSets{dataIdx,3};
 
 % extract list of DICOM files (all files w/o extensions)
 % ref: https://www.mathworks.com/matlabcentral/answers/431023-list-all-and-only-files-with-no-extension
@@ -177,6 +183,7 @@ for sliceIdx = 1:length(fileData)
         
         % apply mask to overall mask
         seg_mask(thisMask ~= 0) = maskIdx;
+        
     end
     
     % store segmentation mask and the masked image
@@ -189,6 +196,10 @@ for sliceIdx = 1:length(fileData)
     % store z location of this slice
     allSegData(sliceIdx).z_loc = dinf.ImagePositionPatient(3);
     
+    % update counts
+    for classIdx = 1:length(classCounts)
+        classCounts(classIdx) = classCounts(classIdx) + nnz( seg_mask == (classIdx -1) );
+    end
 end
 
 %% generate and export segmentation
@@ -314,9 +325,10 @@ endFrame = length(allSegData);
 numFrames = (endFrame-startFrame)+1;
 ralpnData2D.image = uint8(zeros(512,512,numFrames));
 ralpnData2D.label = uint8(zeros(512,512,numFrames));
-
-figure;
-set(gcf,'Position',[0169 0204 1375 0460]);
+if(doShowUNetImages)
+    figure;
+    set(gcf,'Position',[0169 0204 1375 0460]);
+end
 frameCount = 1;
 for sliceIdx = startFrame:endFrame
     
@@ -324,26 +336,34 @@ for sliceIdx = startFrame:endFrame
     %     thisMask = labelVolume(:,:,sliceIdx);
     thisImage = allSegData(sliceIdx).img8;
     thisMask = allSegData(sliceIdx).seg_mask;
-    img8_masked = maskImage(thisImage,thisMask,segColors);
-    
-    subplot(1,3,1);
-    imshow(thisImage,[]);
-    title('\bfRaw Image');
-    
-    subplot(1,3,2);
-    imshow(thisMask+1,segColors);
-    title('\bfClassification Mask');
-    
-    subplot(1,3,3);
-    imshow(img8_masked);
-    title('\bfMasked Image');
     
     ralpnData2D.image(:,:,frameCount) = thisImage;
     ralpnData2D.label(:,:,frameCount) = thisMask;
     frameCount = frameCount + 1;
-    pause(0.1);
+    
+    if(doShowUNetImages)
+        img8_masked = maskImage(thisImage,thisMask,segColors);
+        
+        subplot(1,3,1);
+        imshow(thisImage,[]);
+        title('\bfRaw Image');
+        
+        subplot(1,3,2);
+        imshow(thisMask+1,segColors);
+        title('\bfClassification Mask');
+        
+        subplot(1,3,3);
+        imshow(img8_masked);
+        title('\bfMasked Image');
+        drawnow;
+    end
+
 end
 save(sprintf('ralpnData2D_%03d.mat',dataIdx),'ralpnData2D');
 end
 
 end
+
+% compute class weights
+% classCounts = [366699177; 1515535; 1623015; 613105; 745072]; % from cases 1-10
+w = (1./classCounts)/sum(1./classCounts)
