@@ -30,31 +30,44 @@ doUNetExtract = 1;
 doShowUNetImages = 0;
 minHUScaleVal = -208;
 maxHUScaleVal = 218;
-nAugmentPerSlice = 4; % for each slice also save this many augmented copies
+nAugmentPerSlice = 0; % for each slice also save this many augmented copies
 
 % location of datasets along with start and end Z positions
 % as defined by inferoior aspect of L5 (start), and superior aspect of T11
 % (end); Cite Fananapazir2019 for justification of this range
+% dataSets = {
+%     'H:\CT\31584-001',-1415,-1180; % 31584-001
+%     'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
+%     'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
+%     'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
+%     'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
+%     'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
+%     'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
+%     'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
+%     'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
+%     'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
+%     };
+% repeat with just portion containing at least one kidney
 dataSets = {
-    %     'H:\CT\31584-001',-2600,-1165; % 31584-001_full file!!
-    'H:\CT\31584-001',-1415,-1180; % 31584-001
-    'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
-    'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
-    'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
-    'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
-    'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
-    'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
-    'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
-    'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
-    'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
+    'H:\CT\31584-001',-1380,-1245; % 31584-001
+%     'H:\CT\31584-002\31584-003 6511 6514 CT',-334.32,-244.94; % 31584-002
+%     'H:\CT\31584-003\31584-003 6315 CT',-184.55,-74.65; % 31584-003
+%     'H:\CT\31584-004\31584-004-CT',593.2,713.2; % 31584-004
+%     'H:\CT\31584-005\CT 892882',1833.50,1959.50; % 31584-005
+%     'H:\CT\31584-006\CT 5761-5765',-203.60,-48.90; % 31584-006
+%     'H:\CT\31584-007\CT 9871-9873',-474.30,-345.30; % 31584-007
+%     'H:\CT\31584-008\CT 125797-125799 axial',1741.00,1851.00; % 31584-008
+%     'H:\CT\31584-009\CT 3061-3064',-1163.50,-1038.50; % 31584-009
+%     'H:\CT\31584-010\CT 9001-9004',1450.00,1600.00; % 31584-010
     };
 
 % text file with voxel coordinates of segmentation mask
+% to use fewer masks just comment out lines here
 segFiles = {...
     'LK_grayvalues.txt', ... % LK
     'RK_grayvalues.txt', ... % RK
-    'AA_grayvalues.txt', ... % AA
-    'IVC_grayvalues.txt', ... % IVC
+%     'AA_grayvalues.txt', ... % AA
+%     'IVC_grayvalues.txt', ... % IVC
     };
 
 % define colors to use in masking...
@@ -67,7 +80,7 @@ segColors = [ ...
     ];
 
 % storage for number of pixels in each class
-classCounts = zeros(size(segColors,1),1);
+classCounts = zeros(size(segFiles,2)+1,1);  % don't forget to add background class (+1)
 
 % which file should we use right now?
 % dataIdx = 2;
@@ -212,9 +225,11 @@ for dataIdx = 1:size(dataSets,1)
     delta_x = dinf.PixelSpacing(1);
     delta_y = dinf.PixelSpacing(2);
     delta_z = sliceSpacing;
+    
     spaceDir = [delta_x delta_y delta_z];
     spaceDirMat = diag(spaceDir);
-    
+    spaceorigin = dinf.ImagePositionPatient;  
+    spaceorigin(3) = fileData(1,2);              % UPDATE Z POSITION FOR STARTING SLICE!
     
     % write to file
     if(doSaveNRRD)
@@ -234,8 +249,7 @@ for dataIdx = 1:size(dataSets,1)
         headerInfo_new.kinds = {'domain'  'domain'  'domain'};
         headerInfo_new.endian = 'little';
         headerInfo_new.encoding = 'gzip';
-        headerInfo_new.spaceorigin = dinf.ImagePositionPatient;  % TODO UPDATE Z POSITION FOR STARTING SLICE!
-        headerInfo_new.spaceorigin(3) = fileData(1,2);
+        headerInfo_new.spaceorigin = spaceorigin;
         exportFilename = sprintf('manual_seg_%03d.nrrd',dataIdx);
         nhdr_nrrd_write(exportFilename, headerInfo_new, true);
         disp(['Wrote ' exportFilename]);
@@ -310,6 +324,13 @@ for dataIdx = 1:size(dataSets,1)
     
     %% extract some slices for testing U-Net
     if(doUNetExtract)
+        
+        ralpnData2D.spaceDir = spaceDir;
+        ralpnData2D.spaceDirMat = spaceDirMat;
+        ralpnData2D.spaceorigin = spaceorigin;
+        ralpnData2D.RescaleSlope = dinf.RescaleSlope;
+        ralpnData2D.RescaleIntercept = dinf.RescaleIntercept;
+        
         % also show raw image, classification mask, and masked image
         % 31584-001: 14-27
         % 31584-002: 95-193

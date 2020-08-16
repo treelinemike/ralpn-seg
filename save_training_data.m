@@ -5,8 +5,11 @@ close all; clear; clc;
 basePath = '.';
 fileList = 	cellstr(ls([basePath '/' 'ralpnData2D_*.mat']));
 
-mkdir('./image/');
+mkdir('./image/');  
 mkdir('./seg_mask/');
+
+% storage for number of pixels in each class
+classCounts = zeros(3,1);
 
 for fileIdx = 1:length(fileList)
     thisFileName = fileList{fileIdx};
@@ -40,11 +43,18 @@ for fileIdx = 1:length(fileList)
         seg_mask = seg_mask_crop;
 
         % write images to file
-        imageFile = sprintf('%03d_%03d_image.png',ctIdx,exampIdx);
-        segMaskFile = sprintf('%03d_%03d_seg_mask.png',ctIdx,exampIdx);
+        imageFile = sprintf('%03d_%05d_image.png',ctIdx,exampIdx);
+        segMaskFile = sprintf('%03d_%05d_seg_mask.png',ctIdx,exampIdx);
         imwrite(uint8(image),[basePath '/image/' imageFile]);
         imwrite(uint8(seg_mask),[basePath '/seg_mask/' segMaskFile]);
+        
+        % update counts
+        for classIdx = 1:length(classCounts)
+            classCounts(classIdx) = classCounts(classIdx) + nnz( seg_mask == (classIdx -1) );
+        end
         
         
     end
 end
+
+w = (1./classCounts)/sum(1./classCounts)
