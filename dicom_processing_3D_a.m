@@ -169,9 +169,6 @@ for dataIdx = 1:size(dataSets,1)
         dinf = dicominfo(thisFileFullPath);
         img = double(dicomread(thisFileFullPath))*dinf.RescaleSlope + dinf.RescaleIntercept;  % will need coversion to uint8 to be standardized!
         
-        dinf.RescaleSlope
-        dinf.RescaleIntercept
-        
         % rescale HU to grayscale based on a "pretty good" mapping identified in
         % Mimics
         img8 = uint8((img-minHUScaleVal)*(255/(maxHUScaleVal-minHUScaleVal)));
@@ -287,20 +284,22 @@ for dataIdx = 1:size(dataSets,1)
            oldImageVolume(:,:,oldSliceIdx) = allSegData(oldSliceIdx).img8;
            oldLabelVolume(:,:,oldSliceIdx) = allSegData(oldSliceIdx).seg_mask;
         end
-        
+        %%
         % interpolate image
         % NEED TO DO THIS WITH RAW DICOM IMAGES THEN APPLY WW/WL
         tic
-        newImageVolume = interpn(X,Y,Z,oldImageVolume,Xq,Yq,Zq,'bilinear');
+        newImageVolume = uint8(interpn(X,Y,Z,oldImageVolume,Xq,Yq,Zq,'bilinear'));
         
         % interpolate each mask
         classLabels = unique(oldLabelVolume);
         classLabels(classLabels == 0) = [];
-        newLabelVolume = zeros(size(newImageVolume));
+        newLabelVolume = uint8(zeros(size(newImageVolume)));
+        newLabelVolumeOH = uint8(zeros( [size(newImageVolume),length(classLabels)+1] ));
         for classLabelIdx = 1:length(classLabels)
             thisClassLabel = classLabels(classLabelIdx);
-            thisClassMaskVolume = interpn(X,Y,Z,double(oldLabelVolume==thisClassLabel),Xq,Yq,Zq,'bilinear');
-            thisLabelVolMask = thisClassMaskVolume > 0.2;
+            thisClassMaskVolume = interpn(X,Y,Z,double(oldLabelVolume==thisClassLabel),Xq,Yq,Zq,'bilinear');  % TODO: MAKE THIS BETTER SO MASK SHAPE CHANGES CONTINUOUSLY
+            thisLabelVolMask = thisClassMaskVolume > 0.5;
+            newLabelVolumeOH(:,:,:,classLabelIdx+1) = thisLabelVolMask;
             newLabelVolume( thisLabelVolMask ) = thisClassLabel;
         end
         toc
@@ -310,10 +309,21 @@ for dataIdx = 1:size(dataSets,1)
             thisImage =  uint8(newImageVolume(:,:,newSliceIdx));
             thisMask = newLabelVolume(:,:,newSliceIdx);
             imshow(maskImage(thisImage,thisMask,segColors));
+%             imshow(maskImage(uint8(128*ones(512,512)),thisMask,segColors));
             pause(0.1);
             drawnow;
         end
         
+        % prepare for export to python/tensorflow... tensors will be sliced
+        % along first dimension
+        data_masks = single(permute(newLabelVolumeOH(97:416,97:416,:,:),[3,1,2,4]));
+%         data_masks = single(permute(newLabelVolumeOH(:,:,:,:),[3,1,2,4]));
+        data_images = single(permute(newImageVolume,[3,1,2]));
+        
+        
+        save('dataImportTest.mat','data_masks','data_images');
+        
+        %%
         
         
         % initialize data storage
