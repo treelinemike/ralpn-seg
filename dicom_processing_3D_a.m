@@ -318,7 +318,7 @@ for dataIdx = 1:size(dataSets,1)
         data_masks = single(permute(newLabelVolumeOH(97:416,97:416,:,:),[3,1,2,4]));
         data_images = single(permute(newImageVolume,[3,1,2]));
         save('dataImportTest.mat','data_masks','data_images');
-        
+    end
     
     %% produce animation and save video if desired
     if(doAnimate)
