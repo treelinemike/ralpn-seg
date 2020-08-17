@@ -309,7 +309,6 @@ for dataIdx = 1:size(dataSets,1)
             thisImage =  uint8(newImageVolume(:,:,newSliceIdx));
             thisMask = newLabelVolume(:,:,newSliceIdx);
             imshow(maskImage(thisImage,thisMask,segColors));
-%             imshow(maskImage(uint8(128*ones(512,512)),thisMask,segColors));
             pause(0.1);
             drawnow;
         end
@@ -317,40 +316,9 @@ for dataIdx = 1:size(dataSets,1)
         % prepare for export to python/tensorflow... tensors will be sliced
         % along first dimension
         data_masks = single(permute(newLabelVolumeOH(97:416,97:416,:,:),[3,1,2,4]));
-%         data_masks = single(permute(newLabelVolumeOH(:,:,:,:),[3,1,2,4]));
         data_images = single(permute(newImageVolume,[3,1,2]));
-        
-        
         save('dataImportTest.mat','data_masks','data_images');
         
-        %%
-        
-        
-        % initialize data storage
-        newImageVolume = zeros(512,512,128);
-        newLabelVolume = zeros(512,512,128);
-        allSegDataResampled = [];
-        
-        % map image and label mask from original slicing
-        % note: this does NOT interpolate!
-        for newSliceIdx = 1:length(newSliceCenters)
-            newSliceLoc = newSliceCenters(newSliceIdx);
-            oldSliceToUse = find(oldSliceUpperBounds >= newSliceLoc,1,'first');
-            thisImage = allSegData(oldSliceToUse).img8;
-            thisMask = allSegData(oldSliceToUse).seg_mask;
-            thisMaskedImg = allSegData(oldSliceToUse).img8_masked;
-            
-            % add to 3D data structures
-            newImageVolume(:,:,newSliceIdx) = thisImage;
-            newLabelVolume(:,:,newSliceIdx) = thisMask;
-            
-            % add to a MATLAB struct for display
-            allSegDataResampled(newSliceIdx).img8 = thisImage;
-            allSegDataResampled(newSliceIdx).img8_masked = thisMaskedImg ;
-            allSegDataResampled(newSliceIdx).seg_mask = thisMask;
-            allSegDataResampled(newSliceIdx).z_loc = newSliceLoc;
-        end
-    end
     
     %% produce animation and save video if desired
     if(doAnimate)
