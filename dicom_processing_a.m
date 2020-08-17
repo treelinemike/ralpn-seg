@@ -24,9 +24,9 @@ close all; clear; clc;
 % options
 doMakeVideo = 0;
 doAnimate = 0;
-doReslice = 0;
-doSaveNRRD = 1;
-doUNetExtract = 1;
+doReslice = 1;
+doSaveNRRD = 0;
+doUNetExtract = 0;
 doShowUNetImages = 0;
 minHUScaleVal = -208;
 maxHUScaleVal = 218;
@@ -260,29 +260,60 @@ for dataIdx = 1:size(dataSets,1)
     % ideally actual CT would be resliced and manually labeled
     % but we'll try a simple reslicing in MATLAB first...
     if(doReslice)
-        % make list of upper Z coordinate bounds for each slice
-        sliceUpperBounds = [allSegData.z_loc]'+pixSpace/2;
+        
+        % set x,y coordinates
+        x_vec = 1:512;
+        y_vec = 1:512;
+        
+        % make list of upper Z coordinate lower and upper bounds for each slice
+        oldSliceCenters = [allSegData.z_loc]';
+        oldSliceLowerBounds = oldSliceCenters - sliceSpacing/2;
+        oldSliceUpperBounds = oldSliceCenters + sliceSpacing/2;
         
         % generate new slice centers
         newSliceCenters = linspace(allSegData(1).z_loc,allSegData(end).z_loc,128)';
         
+        % mesh both spaces
+        [X,Y,Z] = ndgrid(x_vec,y_vec,oldSliceCenters);
+        [Xq,Yq,Zq] = ndgrid(x_vec,y_vec,newSliceCenters);
+
+        % produce old volumes
+        oldImageVolume = zeros(512,512,size(oldSliceCenters,1));
+        oldLabelVolume = zeros(512,512,size(oldSliceCenters,1));
+        for oldSliceIdx = 1:size(oldSliceCenters,1)
+           oldImageVolume(:,:,oldSliceIdx) = allSegData(oldSliceIdx).img8;
+           oldLabelVolume(:,:,oldSliceIdx) = allSegData(oldSliceIdx).seg_mask;
+        end
+        
+        % interpolate image
+        % NEED TO DO THIS WITH RAW DICOM IMAGES THEN APPLY WW/WL
+        tic
+        newImageVolume = interpn(X,Y,Z,oldImageVolume,Xq,Yq,Zq,'bicubic');
+        toc
+        
+        figure;
+        for newSliceIdx = 1:size(newImageVolume,3)
+             imshow(newImageVolume(:,:,newSliceIdx),[]);
+             drawnow;
+        end
+        
         % initialize data storage
-        imageVolume = zeros(512,512,128);
-        labelVolume = zeros(512,512,128);
+        newImageVolume = zeros(512,512,128);
+        newLabelVolume = zeros(512,512,128);
         allSegDataResampled = [];
         
         % map image and label mask from original slicing
         % note: this does NOT interpolate!
         for newSliceIdx = 1:length(newSliceCenters)
             newSliceLoc = newSliceCenters(newSliceIdx);
-            oldSliceToUse = find(sliceUpperBounds >= newSliceLoc,1,'first');
+            oldSliceToUse = find(oldSliceUpperBounds >= newSliceLoc,1,'first');
             thisImage = allSegData(oldSliceToUse).img8;
             thisMask = allSegData(oldSliceToUse).seg_mask;
             thisMaskedImg = allSegData(oldSliceToUse).img8_masked;
             
             % add to 3D data structures
-            imageVolume(:,:,newSliceIdx) = thisImage;
-            labelVolume(:,:,newSliceIdx) = thisMask;
+            newImageVolume(:,:,newSliceIdx) = thisImage;
+            newLabelVolume(:,:,newSliceIdx) = thisMask;
             
             % add to a MATLAB struct for display
             allSegDataResampled(newSliceIdx).img8 = thisImage;
