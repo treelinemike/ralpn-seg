@@ -37,31 +37,31 @@ numResampledSlices = 32;
 % location of datasets along with start and end Z positions
 % as defined by inferoior aspect of L5 (start), and superior aspect of T11
 % (end); Cite Fananapazir2019 for justification of this range
-dataSets = {
-%     'H:\CT\31584-001',-1415,-1180; % 31584-001
-    'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
-    'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
-    'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
-    'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
-    'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
-    'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
-    'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
-    'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
-    'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
-    };
-% % repeat with just portion containing at least one kidney
 % dataSets = {
-% %     'H:\CT\31584-001',-1380,-1245; % 31584-001
-%     'H:\CT\31584-002\31584-003 6511 6514 CT',-334.32,-244.94; % 31584-002
-%     'H:\CT\31584-003\31584-003 6315 CT',-184.55,-74.65; % 31584-003
-%     'H:\CT\31584-004\31584-004-CT',593.2,713.2; % 31584-004
-%     'H:\CT\31584-005\CT 892882',1833.50,1959.50; % 31584-005
-%     'H:\CT\31584-006\CT 5761-5765',-203.60,-48.90; % 31584-006
-%     'H:\CT\31584-007\CT 9871-9873',-474.30,-345.30; % 31584-007
-%     'H:\CT\31584-008\CT 125797-125799 axial',1741.00,1851.00; % 31584-008
-%     'H:\CT\31584-009\CT 3061-3064',-1163.50,-1038.50; % 31584-009
-%     'H:\CT\31584-010\CT 9001-9004',1450.00,1600.00; % 31584-010
+% %     'H:\CT\31584-001',-1415,-1180; % 31584-001
+%     'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
+%     'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
+%     'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
+%     'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
+%     'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
+%     'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
+%     'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
+%     'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
+%     'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
 %     };
+% repeat with just portion containing at least one kidney
+dataSets = {
+%     'H:\CT\31584-001',-1380,-1245; % 31584-001
+    'H:\CT\31584-002\31584-003 6511 6514 CT',-334.32,-244.94; % 31584-002
+    'H:\CT\31584-003\31584-003 6315 CT',-184.55,-74.65; % 31584-003
+    'H:\CT\31584-004\31584-004-CT',593.2,713.2; % 31584-004
+    'H:\CT\31584-005\CT 892882',1833.50,1959.50; % 31584-005
+    'H:\CT\31584-006\CT 5761-5765',-203.60,-48.90; % 31584-006
+    'H:\CT\31584-007\CT 9871-9873',-474.30,-345.30; % 31584-007
+    'H:\CT\31584-008\CT 125797-125799 axial',1741.00,1851.00; % 31584-008
+    'H:\CT\31584-009\CT 3061-3064',-1163.50,-1038.50; % 31584-009
+    'H:\CT\31584-010\CT 9001-9004',1450.00,1600.00; % 31584-010
+    };
 
 % text file with voxel coordinates of segmentation mask
 % to use fewer masks just comment out lines here
@@ -300,16 +300,16 @@ for dataIdx = 1:size(dataSets,1)
         newImageVolume = imresize3(newImageVolume,[resizedImageDim, resizedImageDim, size(newImageVolume,3)]);
         
         % interpolate each mask
-        classLabels = unique(oldLabelVolume);
-        classLabels(classLabels == 0) = [];
+        classLabels = unique(oldLabelVolume,'sorted');
+%         classLabels(classLabels == 0) = [];
         newLabelVolume = uint8(zeros(size(newImageVolume)));
-        newLabelVolumeOH = uint8(zeros( [size(newImageVolume),length(classLabels)+1] ));
+        newLabelVolumeOH = uint8(zeros( [size(newImageVolume),length(classLabels)] ));
         for classLabelIdx = 1:length(classLabels)
             thisClassLabel = classLabels(classLabelIdx);
             thisClassMaskVolume = interpn(X,Y,Z,double(oldLabelVolume==thisClassLabel),Xq,Yq,Zq,'bilinear');  % TODO: MAKE THIS BETTER SO MASK SHAPE CHANGES CONTINUOUSLY
             thisClassMaskVolume = imresize3(thisClassMaskVolume,[resizedImageDim, resizedImageDim, size(newImageVolume,3)],'nearest');
             thisLabelVolMask = thisClassMaskVolume > 0.5;
-            newLabelVolumeOH(:,:,:,classLabelIdx+1) = thisLabelVolMask;
+            newLabelVolumeOH(:,:,:,classLabelIdx) = thisLabelVolMask;
             newLabelVolume( thisLabelVolMask ) = thisClassLabel;
         end
         
@@ -448,9 +448,45 @@ for dataIdx = 1:size(dataSets,1)
     
 end
 
+
 % save data
 save('data_images.mat','data_images');
 save('data_masks.mat','data_masks');
+
+% %%
+% % do data augmentation here
+% numAugPerExample = 4;
+% data_images_aug_size = size(data_images);
+% data_images_aug_size(1) = (numAugPerExample+1)*data_images_aug_size(1);
+% data_masks_aug_size = size(data_masks);
+% data_masks_aug_size(1) = (numAugPerExample+1)*data_masks_aug_size(1);
+% data_images_aug = zeros(data_images_aug_size);
+% data_masks_aug = zeros(data_masks_aug_size);
+% 
+% outputIdx = 1;
+% for dataIdx = 1:size(data_images,1)
+% 
+%     thisImage = data_images(dataIdx,:,:,:);
+%     thisMask = data_masks(dataIdx,:,:,:,:);
+%     data_images_aug(outputIdx,:,:,:) = thisImage;
+%     data_masks_aug(outputIdx,:,:,:,:) = thisMask;
+%     outputIdx = outputIdx + 1;
+%     
+%     for augIdx = 1:numAugPerExample
+%         [newImage,newMask] = ralpn_seg_augment_3D( thisImage, thisMask, ...
+%                     0.8, ...   % constrast range
+%                     10, ...    % angle range [deg]
+%                     30, ...    % translation range [pixels]
+%                     4, ...     % warp center range in normalized image units (image dims -1 to 1)
+%                     0.5, ...   % warp SD minimum
+%                     2.5, ...   % warp SD maximum
+%                     20);       % max warp magnitude [pixels]
+%         data_images_aug(outputIdx,:,:,:) = newImage;
+%         data_masks_aug(outputIdx,:,:,:,:) = newMask;
+%         outputIdx = outputIdx + 1;
+%     end
+% end
+
 
 % compute class weights
 % classCounts = [366699177; 1515535; 1623015; 613105; 745072]; % from cases 1-10
