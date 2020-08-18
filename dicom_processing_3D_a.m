@@ -31,25 +31,27 @@ doShowUNetImages = 0;
 minHUScaleVal = -208;
 maxHUScaleVal = 218;
 nAugmentPerSlice = 0; % for each slice also save this many augmented copies
+resizedImageDim = 384;
+numResampledSlices = 32;
 
 % location of datasets along with start and end Z positions
 % as defined by inferoior aspect of L5 (start), and superior aspect of T11
 % (end); Cite Fananapazir2019 for justification of this range
-% dataSets = {
-%     'H:\CT\31584-001',-1415,-1180; % 31584-001
-%     'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
-%     'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
-%     'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
-%     'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
-%     'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
-%     'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
-%     'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
-%     'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
-%     'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
-%     };
-% repeat with just portion containing at least one kidney
 dataSets = {
-    'H:\CT\31584-001',-1380,-1245; % 31584-001
+%     'H:\CT\31584-001',-1415,-1180; % 31584-001
+    'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
+    'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
+    'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
+    'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
+    'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
+    'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
+    'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
+    'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
+    'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
+    };
+% % repeat with just portion containing at least one kidney
+% dataSets = {
+% %     'H:\CT\31584-001',-1380,-1245; % 31584-001
 %     'H:\CT\31584-002\31584-003 6511 6514 CT',-334.32,-244.94; % 31584-002
 %     'H:\CT\31584-003\31584-003 6315 CT',-184.55,-74.65; % 31584-003
 %     'H:\CT\31584-004\31584-004-CT',593.2,713.2; % 31584-004
@@ -59,7 +61,7 @@ dataSets = {
 %     'H:\CT\31584-008\CT 125797-125799 axial',1741.00,1851.00; % 31584-008
 %     'H:\CT\31584-009\CT 3061-3064',-1163.50,-1038.50; % 31584-009
 %     'H:\CT\31584-010\CT 9001-9004',1450.00,1600.00; % 31584-010
-    };
+%     };
 
 % text file with voxel coordinates of segmentation mask
 % to use fewer masks just comment out lines here
@@ -80,7 +82,12 @@ segColors = [ ...
     ];
 
 % storage for number of pixels in each class
-classCounts = zeros(size(segFiles,2)+1,1);  % don't forget to add background class (+1)
+numClasses = size(segFiles,2)+1;  % don't forget to add background class (+1)
+classCounts = zeros(numClasses,1);  
+
+% storage for data to export to python/tensorflow
+data_masks = uint8( zeros( size(dataSets,1), resizedImageDim, resizedImageDim, numResampledSlices, numClasses ));
+data_images = uint8( zeros( size(dataSets,1), resizedImageDim, resizedImageDim, numResampledSlices ));
 
 % which file should we use right now?
 % dataIdx = 2;
@@ -261,6 +268,9 @@ for dataIdx = 1:size(dataSets,1)
     % but we'll try a simple reslicing in MATLAB first...
     if(doReslice)
         
+        disp('Reslicing');
+        tic
+        
         % set x,y coordinates
         x_vec = 1:512;
         y_vec = 1:512;
@@ -271,7 +281,7 @@ for dataIdx = 1:size(dataSets,1)
         oldSliceUpperBounds = oldSliceCenters + sliceSpacing/2;
         
         % generate new slice centers
-        newSliceCenters = linspace(allSegData(1).z_loc,allSegData(end).z_loc,128)';
+        newSliceCenters = linspace(allSegData(1).z_loc,allSegData(end).z_loc,numResampledSlices)';
         
         % mesh both spaces
         [X,Y,Z] = ndgrid(x_vec,y_vec,oldSliceCenters);
@@ -284,11 +294,10 @@ for dataIdx = 1:size(dataSets,1)
            oldImageVolume(:,:,oldSliceIdx) = allSegData(oldSliceIdx).img8;
            oldLabelVolume(:,:,oldSliceIdx) = allSegData(oldSliceIdx).seg_mask;
         end
-        %%
+        
         % interpolate image
-        % NEED TO DO THIS WITH RAW DICOM IMAGES THEN APPLY WW/WL
-        tic
         newImageVolume = uint8(interpn(X,Y,Z,oldImageVolume,Xq,Yq,Zq,'bilinear'));
+        newImageVolume = imresize3(newImageVolume,[resizedImageDim, resizedImageDim, size(newImageVolume,3)]);
         
         % interpolate each mask
         classLabels = unique(oldLabelVolume);
@@ -298,26 +307,35 @@ for dataIdx = 1:size(dataSets,1)
         for classLabelIdx = 1:length(classLabels)
             thisClassLabel = classLabels(classLabelIdx);
             thisClassMaskVolume = interpn(X,Y,Z,double(oldLabelVolume==thisClassLabel),Xq,Yq,Zq,'bilinear');  % TODO: MAKE THIS BETTER SO MASK SHAPE CHANGES CONTINUOUSLY
+            thisClassMaskVolume = imresize3(thisClassMaskVolume,[resizedImageDim, resizedImageDim, size(newImageVolume,3)],'nearest');
             thisLabelVolMask = thisClassMaskVolume > 0.5;
             newLabelVolumeOH(:,:,:,classLabelIdx+1) = thisLabelVolMask;
             newLabelVolume( thisLabelVolMask ) = thisClassLabel;
         end
-        toc
         
-        figure;
-        for newSliceIdx = 1:size(newImageVolume,3)
-            thisImage =  uint8(newImageVolume(:,:,newSliceIdx));
-            thisMask = newLabelVolume(:,:,newSliceIdx);
-            imshow(maskImage(thisImage,thisMask,segColors));
-            pause(0.1);
-            drawnow;
-        end
+        %         % animate
+        %         figure;
+        %         for newSliceIdx = 1:size(newImageVolume,3)
+        %             thisImage =  uint8(newImageVolume(:,:,newSliceIdx));
+        %             thisMask = newLabelVolume(:,:,newSliceIdx);
+        %             imshow(maskImage(thisImage,thisMask,segColors));
+        %             pause(0.1);
+        %             drawnow;
+        %         end
         
         % prepare for export to python/tensorflow... tensors will be sliced
-        % along first dimension
-        data_masks = single(permute(newLabelVolumeOH(97:416,97:416,:,:),[3,1,2,4]));
-        data_images = single(permute(newImageVolume,[3,1,2]));
-        save('dataImportTest.mat','data_masks','data_images');
+        % along first dimension by tf.data.Dataset.from_tensor_slices()
+        %         data_masks(dataIdx,:,:,:,:) = newLabelVolumeOH(97:416,97:416,:,:);
+        data_masks(dataIdx,:,:,:,:) = newLabelVolumeOH(:,:,:,:);
+        data_images(dataIdx,:,:,:) = newImageVolume;
+        
+        % for processing image slices use this code... recall that tensors
+        % sliced along first dimension by
+        % tf.data.Dataset.from_tensor_slices()
+        %         data_masks = single(permute(newLabelVolumeOH(97:416,97:416,:,:),[3,1,2,4]));
+        %         data_images = single(permute(newImageVolume,[3,1,2]));
+        
+        toc
     end
     
     %% produce animation and save video if desired
@@ -429,6 +447,10 @@ for dataIdx = 1:size(dataSets,1)
     end
     
 end
+
+% save data
+save('data_images.mat','data_images');
+save('data_masks.mat','data_masks');
 
 % compute class weights
 % classCounts = [366699177; 1515535; 1623015; 613105; 745072]; % from cases 1-10
