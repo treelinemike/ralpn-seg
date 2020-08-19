@@ -448,47 +448,94 @@ for dataIdx = 1:size(dataSets,1)
     
 end
 
+% compute class weights
+% classCounts = [366699177; 1515535; 1623015; 613105; 745072]; % from cases 1-10
+% from cases 2-10 (saving 1 for final check)
+w = (1./classCounts)/sum(1./classCounts)
 
 % save data
 save('data_images.mat','data_images');
 save('data_masks.mat','data_masks');
 
-% %%
-% % do data augmentation here
-% numAugPerExample = 4;
-% data_images_aug_size = size(data_images);
-% data_images_aug_size(1) = (numAugPerExample+1)*data_images_aug_size(1);
-% data_masks_aug_size = size(data_masks);
-% data_masks_aug_size(1) = (numAugPerExample+1)*data_masks_aug_size(1);
-% data_images_aug = zeros(data_images_aug_size);
-% data_masks_aug = zeros(data_masks_aug_size);
-% 
-% outputIdx = 1;
-% for dataIdx = 1:size(data_images,1)
-% 
-%     thisImage = data_images(dataIdx,:,:,:);
-%     thisMask = data_masks(dataIdx,:,:,:,:);
-%     data_images_aug(outputIdx,:,:,:) = thisImage;
-%     data_masks_aug(outputIdx,:,:,:,:) = thisMask;
-%     outputIdx = outputIdx + 1;
-%     
-%     for augIdx = 1:numAugPerExample
-%         [newImage,newMask] = ralpn_seg_augment_3D( thisImage, thisMask, ...
-%                     0.8, ...   % constrast range
-%                     10, ...    % angle range [deg]
-%                     30, ...    % translation range [pixels]
-%                     4, ...     % warp center range in normalized image units (image dims -1 to 1)
-%                     0.5, ...   % warp SD minimum
-%                     2.5, ...   % warp SD maximum
-%                     20);       % max warp magnitude [pixels]
-%         data_images_aug(outputIdx,:,:,:) = newImage;
-%         data_masks_aug(outputIdx,:,:,:,:) = newMask;
-%         outputIdx = outputIdx + 1;
-%     end
-% end
+%%
+% do data augmentation here
+numAugPerExample = 4;
+data_images_aug_size = size(data_images);
+data_images_aug_size(1) = (numAugPerExample+1)*data_images_aug_size(1);
+data_masks_aug_size = size(data_masks);
+data_masks_aug_size(1) = (numAugPerExample+1)*data_masks_aug_size(1);
+data_images_aug = zeros(data_images_aug_size);
+data_masks_aug = zeros(data_masks_aug_size);
 
+outputIdx = 1;
+for dataIdx = 1:size(data_images,1)
+    disp(['Processing volume ' num2str(outputIdx) '/' num2str(data_images_aug_size(1))]);
+    thisImage = squeeze(data_images(dataIdx,:,:,:));
+    thisMask = squeeze(data_masks(dataIdx,:,:,:,:));
+    data_images_aug(outputIdx,:,:,:) = thisImage;
+    data_masks_aug(outputIdx,:,:,:,:) = thisMask;
+    outputIdx = outputIdx + 1;
+    
+    for augIdx = 1:numAugPerExample
+        disp(['Processing volume ' num2str(outputIdx) '/' num2str(data_images_aug_size(1))]);
+        [newImage,newMask] = ralpn_seg_augment_3D( thisImage, thisMask, ...
+                    0.8, ...   % constrast range
+                    10, ...    % angle range [deg]
+                    20, ...    % translation range [pixels]
+                    2, ...     % warp center range in normalized image units (image dims -1 to 1)
+                    0.5, ...   % warp SD minimum
+                    1, ...   % warp SD maximum
+                    10);       % max warp magnitude [pixels]
+        data_images_aug(outputIdx,:,:,:) = newImage;
+        data_masks_aug(outputIdx,:,:,:,:) = newMask;
+        outputIdx = outputIdx + 1;
+    end
+end
 
-% compute class weights
-% classCounts = [366699177; 1515535; 1623015; 613105; 745072]; % from cases 1-10
-% from cases 2-10 (saving 1 for final check)
-w = (1./classCounts)/sum(1./classCounts)
+%% show an example volume
+volIdx = 2;
+
+this_image_vol = squeeze(data_images_aug(volIdx,:,:,:));
+this_mask_vol = squeeze(data_masks_aug(volIdx,:,:,:,:));
+[~,this_mask_vol]=max(this_mask_vol,[],4);  % convert one hot to dense
+this_mask_vol = this_mask_vol-1;
+
+figure;
+set(gcf,'Position',[0424 0189 0980 0721]);
+for frameIdx = 1:size(this_image_vol,3)
+    this_frame_image = uint8(this_image_vol(:,:,frameIdx));
+    this_frame_mask = this_mask_vol(:,:,frameIdx);
+    this_frame_image_masked = maskImage(this_frame_image,this_frame_mask,segColors);
+    
+    subplot(1,2,1);
+    imshow(this_frame_image);
+    axis equal;
+    
+    subplot(1,2,2);
+    imshow(this_frame_image_masked);
+    axis equal;
+    
+    drawnow;
+end
+
+%%
+classCounts2 = zeros(1,size(data_masks_aug,5));
+for i = 1:size(data_masks_aug,5)
+    classCounts2(i) = nnz(data_masks_aug(:,:,:,:,i));
+end
+classCounts2
+w = (1./classCounts2)/sum(1./classCounts2)
+
+sum(classCounts2)==numel(data_masks_aug(:,:,:,:,1))
+
+%%
+% save data
+
+% convert one hot to dense
+[~,data_masks_aug_dense]=max(data_masks_aug,[],5);
+data_masks_aug_dense = uint8(data_masks_aug_dense-1);
+
+data_images_aug = uint8(data_images_aug);
+data_masks_aug = uint8(data_masks_aug);
+save('data_images_aug.mat','data_images_aug');%,'-v7.3');
+save('data_masks_aug_dense.mat','data_masks_aug_dense');%,'-v7.3');
