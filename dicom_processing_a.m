@@ -23,9 +23,9 @@ close all; clear; clc;
 
 % options
 doMakeVideo = 0;
-doAnimate = 0;
-doReslice = 1;
-doSaveNRRD = 0;
+doAnimate = 1;
+doReslice = 0;
+doSaveNRRD = 1;
 doUNetExtract = 0;
 doShowUNetImages = 0;
 minHUScaleVal = -208;
@@ -35,21 +35,21 @@ nAugmentPerSlice = 0; % for each slice also save this many augmented copies
 % location of datasets along with start and end Z positions
 % as defined by inferoior aspect of L5 (start), and superior aspect of T11
 % (end); Cite Fananapazir2019 for justification of this range
-% dataSets = {
-%     'H:\CT\31584-001',-1415,-1180; % 31584-001
-%     'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
-%     'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
-%     'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
-%     'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
-%     'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
-%     'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
-%     'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
-%     'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
-%     'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
-%     };
-% repeat with just portion containing at least one kidney
 dataSets = {
-    'H:\CT\31584-001',-1380,-1245; % 31584-001
+    'H:\CT\31584-001',-1415,-1180; % 31584-001
+    'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
+    'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
+    'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
+    'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
+    'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
+    'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
+    'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
+    'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
+    'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
+    };
+% repeat with just portion containing at least one kidney
+% dataSets = {
+%     'H:\CT\31584-001',-1380,-1245; % 31584-001
 %     'H:\CT\31584-002\31584-003 6511 6514 CT',-334.32,-244.94; % 31584-002
 %     'H:\CT\31584-003\31584-003 6315 CT',-184.55,-74.65; % 31584-003
 %     'H:\CT\31584-004\31584-004-CT',593.2,713.2; % 31584-004
@@ -59,15 +59,15 @@ dataSets = {
 %     'H:\CT\31584-008\CT 125797-125799 axial',1741.00,1851.00; % 31584-008
 %     'H:\CT\31584-009\CT 3061-3064',-1163.50,-1038.50; % 31584-009
 %     'H:\CT\31584-010\CT 9001-9004',1450.00,1600.00; % 31584-010
-    };
+%     };
 
 % text file with voxel coordinates of segmentation mask
 % to use fewer masks just comment out lines here
 segFiles = {...
     'LK_grayvalues.txt', ... % LK
     'RK_grayvalues.txt', ... % RK
-%     'AA_grayvalues.txt', ... % AA
-%     'IVC_grayvalues.txt', ... % IVC
+    'AA_grayvalues.txt', ... % AA
+    'IVC_grayvalues.txt', ... % IVC
     };
 
 % define colors to use in masking...
@@ -84,7 +84,7 @@ classCounts = zeros(size(segFiles,2)+1,1);  % don't forget to add background cla
 
 % which file should we use right now?
 % dataIdx = 2;
-for dataIdx = 1:size(dataSets,1)
+for dataIdx = 1 %1:size(dataSets,1)
     disp(['Processing file ' num2str(dataIdx)]);
     basePath = dataSets{dataIdx,1};
     startSliceLoc = dataSets{dataIdx,2};
@@ -98,16 +98,20 @@ for dataIdx = 1:size(dataSets,1)
     allFilenames(filesWithExtensionsMask) = [];
     
     %% determine z location of each slice
+    % as given by DICOM metadata
     fileData = [];
     for fileIdx = 1:length(allFilenames)
         thisFileFullPath = [basePath '\' allFilenames{fileIdx}];
         dinf = dicominfo(thisFileFullPath);
         fileData(fileIdx,:) = [dinf.ImagePositionPatient(3)];  % dinf.ImagePositionPatient(3) and dinf.SliceLocation should be identical!
     end
+    
+    % sort list of DICOM files by z location
     [fileData,sortOrder] = sortrows(fileData,1);
     fileData = [sortOrder fileData];   % [ file index in allFilenames, actual Z position in mm ]
     
-    % crop to specified ROI
+    % crop list of DICOM files to ROI specified in dataSets cell array with
+    % dataset paths
     sliceMask = (fileData(:,2) >= startSliceLoc) & (fileData(:,2) <= endSliceLoc);
     fileData(~sliceMask,:) = [];
     
@@ -131,9 +135,9 @@ for dataIdx = 1:size(dataSets,1)
     % corner
     % need to add one pixel to x direction for consistency with MIMICS, don't
     % entirely understand this yet?
-    ulPixCoords = dinf.ImagePositionPatient(1:2)'-pixSpace/2 + [-1 0]*pixSpace;
-    
-    %% load and adjust all segmentation data
+     imageULCornerXYCoords = dinf.ImagePositionPatient(1:2)'-pixSpace/2;
+     
+    %% load and adjust all segmentation data from Mimics
     % segmentation z locations are taken on superior aspect of voxel
     % whereas slice z locations are taken at center of voxel
     % adjust all to be at center of voxel
@@ -150,8 +154,19 @@ for dataIdx = 1:size(dataSets,1)
         
         % save all data in structure
         % [ voxelCtrZLocation, PixIdxX, PixIdxY ]
-        pixelLocs =  round((thisSegData(:,1:2) - repmat(ulPixCoords,size(thisSegData,1),1))/pixSpace);
-        maskData(segFileIdx).data = [thisSegData(:,3)-sliceSpacing/2 pixelLocs];
+        
+        % pixel position gives (col#,row#) starting with (1,1) at upper left pixel
+        % note, because greyvalue export gives superior, posterior (lower), LEFT corner of voxel we need to add 1 pixel to the x direction to get the correct columm 
+        pixelLocs =  round( (  thisSegData(:,1:2) - repmat(imageULCornerXYCoords,size(thisSegData,1),1)  )  /pixSpace) + repmat([1 0],size(thisSegData,1),1); 
+        
+        % voxel z location
+        % subtract half of the slice spacing because the greyvalue export
+        % from MIMICS gives the SUPERIOR, posterior, left corner of the
+        % voxel
+        voxelZLoc = thisSegData(:,3)-sliceSpacing/2;
+        
+        maskData(segFileIdx).data = [voxelZLoc pixelLocs]; %%
+%         maskData(segFileIdx).data = [thisSegData(:,3) pixelLocs]; %%
     end
     
     %% extract DICOM images and pair with the segmentations
@@ -193,6 +208,7 @@ for dataIdx = 1:size(dataSets,1)
             % generate a mask for this image and this classification label
             thisMask = zeros(size(seg_mask));
             for pixelIdx = 1:size(pixelLocs,1)
+                % remember the conversion had given us (xgv,ygv)->(col#,row#) so we to switch coordinates for mask 
                 thisMask( pixelLocs(pixelIdx,2), pixelLocs(pixelIdx,1)) = 1;
             end
             
