@@ -84,7 +84,7 @@ classCounts = zeros(size(segFiles,2)+1,1);  % don't forget to add background cla
 
 % which file should we use right now?
 % dataIdx = 2;
-for dataIdx = 1 %1:size(dataSets,1)
+for dataIdx = 4 %1:size(dataSets,1)
     disp(['Processing file ' num2str(dataIdx)]);
     basePath = dataSets{dataIdx,1};
     startSliceLoc = dataSets{dataIdx,2};
