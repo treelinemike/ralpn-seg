@@ -25,7 +25,7 @@ close all; clear; clc;
 doMakeVideo = 0;
 doAnimate = 1;
 doReslice = 0;
-doSaveNRRD = 1;
+doSaveNRRD = 0;
 doUNetExtract = 0;
 doShowUNetImages = 0;
 minHUScaleVal = -208;
@@ -38,7 +38,8 @@ nAugmentPerSlice = 0; % for each slice also save this many augmented copies
 dataSets = {
     'H:\CT\31584-001',-1415,-1180; % 31584-001
     'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
-    'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
+%     'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
+    'H:\CT\31584-003\31584-003 6315 CT',-256.00,-44.41; % 31584-003 PHANTOM
     'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
     'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
     'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
@@ -79,12 +80,69 @@ segColors = [ ...
     0.33 0.33 1.00; ... % IVC
     ];
 
+% vertices of border to draw over each frame of CT (display only)
+% given in 2D coordinates of CT space (x and y... drawn at every z
+% position)
+borderVertexCoords = [
+   -122.00 -60.00;
+   -122.00   27.51826;
+    -72.00   77.51826;
+     95.00   77.51826;
+    145.00   27.51826;
+    145.00 -60.00;
+     95.00 -110.00;
+    -72.00 -110.00;
+];
+
+
+
+
+% borderVertexCoords = [
+%    -130.00 -60.00;
+%    -130.00   27.51826;
+%     -80.00   77.51826;
+%     103.00   77.51826;
+%     153.00   27.51826;
+%     153.00 -60.00;
+%     103.00 -110.00;
+%     -80.00 -110.00;
+% ];
+
+% borderVertexCoords = [
+%    -130.00 -86.00;
+%    -130.00   27.51826;
+%     -80.00   77.51826;
+%     120.00   77.51826;
+%     170.00   27.51826;
+%     170.00 -86.00;
+%     120.00 -136.00;
+%     -80.00 -136.00;
+% ];
+
+% borderVertexCoords = [
+%    -130.00 -107.13;
+%    -130.00   48.65;
+%     -80.00   77.51826;
+%     120.00   77.51826;
+%     170.00   48.65;
+%     170.00 -107.13;
+%     120.00 -136.00;
+%     -80.00 -136.00;
+% ];
+
+% borderVertexCoords = [
+%    -130.0 -136.0;
+%    -130.0   77.51826;
+%     170.0   77.51826;
+%     170.0 -136.0;    
+% ];
+
 % storage for number of pixels in each class
 classCounts = zeros(size(segFiles,2)+1,1);  % don't forget to add background class (+1)
 
 % which file should we use right now?
 % dataIdx = 2;
-for dataIdx = 4 %1:size(dataSets,1)
+for dataIdx = 3 %1:size(dataSets,1)
     disp(['Processing file ' num2str(dataIdx)]);
     basePath = dataSets{dataIdx,1};
     startSliceLoc = dataSets{dataIdx,2};
@@ -168,6 +226,11 @@ for dataIdx = 4 %1:size(dataSets,1)
         maskData(segFileIdx).data = [voxelZLoc pixelLocs]; %%
 %         maskData(segFileIdx).data = [thisSegData(:,3) pixelLocs]; %%
     end
+    
+    % pixel position gives (col#,row#) starting with (1,1) at upper left pixel
+    % note, because greyvalue export gives superior, posterior (lower), LEFT corner of voxel we need to add 1 pixel to the x direction to get the correct columm
+    borderVertexPixelLocs =  round( (  borderVertexCoords(:,1:2) - repmat(imageULCornerXYCoords,size(borderVertexCoords,1),1)  )  /pixSpace) + repmat([1 0],size(borderVertexCoords,1),1);
+    borderVertexPixelLocs = [borderVertexPixelLocs; borderVertexPixelLocs(1:2,:)];  % repeat first TWO vertices to get both a closed shape and a nice rounded corner
     
     %% extract DICOM images and pair with the segmentations
     allSegData = [];
@@ -349,7 +412,9 @@ for dataIdx = 4 %1:size(dataSets,1)
         figure;
         for sliceIdx = 1:length(dispData)
             imshow( dispData(sliceIdx).img8_masked );
+            hold on;
             axis equal;
+            plot(borderVertexPixelLocs(:,1),borderVertexPixelLocs(:,2),'-','Color',[1 1 0],'LineWidth',3);
             title(sprintf('Labeled Slice @ z = %8.2f mm',dispData(sliceIdx).z_loc));
             drawnow;
             
@@ -358,7 +423,7 @@ for dataIdx = 4 %1:size(dataSets,1)
                 saveas(gcf,thisImgFile);
                 system(['convert -trim ' thisImgFile ' ' thisImgFile]);  % REQUIRES convert FROM IMAGEMAGICK!
             else
-                pause(0.1);
+                pause(0.01);
             end
         end
         
