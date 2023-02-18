@@ -22,31 +22,33 @@
 close all; clear; clc;
 
 % options
+doUseDCMExtension = true;
 doMakeVideo = 0;
 doAnimate = 1;
 doReslice = 0;
-doSaveNRRD = 0;
+doSaveNRRD = 1;
 doUNetExtract = 0;
 doShowUNetImages = 0;
-minHUScaleVal = -208;
-maxHUScaleVal = 218;
+minHUScaleVal = -331;% -208;
+maxHUScaleVal = 77;% 218;
 nAugmentPerSlice = 0; % for each slice also save this many augmented copies
 
 % location of datasets along with start and end Z positions
 % as defined by inferoior aspect of L5 (start), and superior aspect of T11
 % (end); Cite Fananapazir2019 for justification of this range
 dataSets = {
-    'H:\CT\31584-001',-1415,-1180; % 31584-001
-    'H:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
+    'C:\Users\f002r5k\Desktop\test',-735.43,-543.43;
+    'D:\CT\31584-001',-1415,-1180; % 31584-001
+    'D:\CT\31584-002\31584-003 6511 6514 CT',-388.69,-177.44; % 31584-002
 %     'H:\CT\31584-003\31584-003 6315 CT',-265.76,-54.35; % 31584-003
-    'H:\CT\31584-003\31584-003 6315 CT',-256.00,-44.41; % 31584-003 PHANTOM
-    'H:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
-    'H:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
-    'H:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
-    'H:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
-    'H:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
-    'H:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
-    'H:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
+    'D:\CT\31584-003\31584-003 6315 CT',-256.00,-44.41; % 31584-003 PHANTOM
+    'D:\CT\31584-004\31584-004-CT',513.2,753.2; % 31584-004
+    'D:\CT\31584-005\CT 892882',1809.5,2028.5; % 31584-005
+    'D:\CT\31584-006\CT 5761-5765',-269.4,-26.5; % 31584-006
+    'D:\CT\31584-007\CT 9871-9873',-516.3,-267.3; % 31584-007
+    'D:\CT\31584-008\CT 125797-125799 axial',1656.00,1896.00; % 31584-008
+    'D:\CT\31584-009\CT 3061-3064',-1203.5,-973.5; % 31584-009
+    'D:\CT\31584-010\CT 9001-9004',1435.00,1660.00; % 31584-010
     };
 % repeat with just portion containing at least one kidney
 % dataSets = {
@@ -65,10 +67,11 @@ dataSets = {
 % text file with voxel coordinates of segmentation mask
 % to use fewer masks just comment out lines here
 segFiles = {...
-    'LK_grayvalues.txt', ... % LK
-    'RK_grayvalues.txt', ... % RK
-    'AA_grayvalues.txt', ... % AA
-    'IVC_grayvalues.txt', ... % IVC
+    'R Final_grayvalues.txt',
+%     'LK_grayvalues.txt', ... % LK
+%     'RK_grayvalues.txt', ... % RK
+%     'AA_grayvalues.txt', ... % AA
+%     'IVC_grayvalues.txt', ... % IVC
     };
 
 % define colors to use in masking...
@@ -142,7 +145,7 @@ classCounts = zeros(size(segFiles,2)+1,1);  % don't forget to add background cla
 
 % which file should we use right now?
 % dataIdx = 2;
-for dataIdx = 3 %1:size(dataSets,1)
+for dataIdx = 1 %1:size(dataSets,1)
     disp(['Processing file ' num2str(dataIdx)]);
     basePath = dataSets{dataIdx,1};
     startSliceLoc = dataSets{dataIdx,2};
@@ -152,8 +155,13 @@ for dataIdx = 3 %1:size(dataSets,1)
     % ref: https://www.mathworks.com/matlabcentral/answers/431023-list-all-and-only-files-with-no-extension
     allFilesInDir = dir(basePath);
     allFilenames = {allFilesInDir.name};
-    filesWithExtensionsMask = contains(allFilenames,'.');
-    allFilenames(filesWithExtensionsMask) = [];
+    if(doUseDCMExtension)
+        filesWithDCMExtensionMask = contains(allFilenames,'.dcm');
+        allFilenames = allFilenames(filesWithDCMExtensionMask);
+    else
+        filesWithExtensionsMask = contains(allFilenames,'.');
+        allFilenames(filesWithExtensionsMask) = [];
+    end
     
     %% determine z location of each slice
     % as given by DICOM metadata
@@ -187,6 +195,9 @@ for dataIdx = 3 %1:size(dataSets,1)
     end
     pixSpace = pixSpace(1);
     
+    % inspect image orientation
+    dinf.ImageOrientationPatient
+
     % finally, coordinates of the upper left pixel
     % TODO: WE ASSUME THAT THIS IS CONSTANT FOR ENTIRE STACK!
     % subtract off half the pixel width to get the coordinates of the UL
@@ -194,7 +205,9 @@ for dataIdx = 3 %1:size(dataSets,1)
     % need to add one pixel to x direction for consistency with MIMICS, don't
     % entirely understand this yet?
      imageULCornerXYCoords = dinf.ImagePositionPatient(1:2)'-pixSpace/2;
-     
+
+     imageULCornerXYCoords = imageULCornerXYCoords - pixSpace*double([dinf.Width-2 dinf.Height]);  % ONLY IF ROTATED!
+
     %% load and adjust all segmentation data from Mimics
     % segmentation z locations are taken on superior aspect of voxel
     % whereas slice z locations are taken at center of voxel
@@ -226,12 +239,12 @@ for dataIdx = 3 %1:size(dataSets,1)
         maskData(segFileIdx).data = [voxelZLoc pixelLocs]; %%
 %         maskData(segFileIdx).data = [thisSegData(:,3) pixelLocs]; %%
     end
-    
-    % pixel position gives (col#,row#) starting with (1,1) at upper left pixel
-    % note, because greyvalue export gives superior, posterior (lower), LEFT corner of voxel we need to add 1 pixel to the x direction to get the correct columm
-    borderVertexPixelLocs =  round( (  borderVertexCoords(:,1:2) - repmat(imageULCornerXYCoords,size(borderVertexCoords,1),1)  )  /pixSpace) + repmat([1 0],size(borderVertexCoords,1),1);
-    borderVertexPixelLocs = [borderVertexPixelLocs; borderVertexPixelLocs(1:2,:)];  % repeat first TWO vertices to get both a closed shape and a nice rounded corner
-    
+% %     
+% %     % pixel position gives (col#,row#) starting with (1,1) at upper left pixel
+% %     % note, because greyvalue export gives superior, posterior (lower), LEFT corner of voxel we need to add 1 pixel to the x direction to get the correct columm
+% %     borderVertexPixelLocs =  round( (  borderVertexCoords(:,1:2) - repmat(imageULCornerXYCoords,size(borderVertexCoords,1),1)  )  /pixSpace) + repmat([1 0],size(borderVertexCoords,1),1);
+% %     borderVertexPixelLocs = [borderVertexPixelLocs; borderVertexPixelLocs(1:2,:)];  % repeat first TWO vertices to get both a closed shape and a nice rounded corner
+% %     
     %% extract DICOM images and pair with the segmentations
     allSegData = [];
     for sliceIdx = 1:length(fileData)
@@ -281,6 +294,9 @@ for dataIdx = 3 %1:size(dataSets,1)
         end
         
         % store segmentation mask and the masked image
+        
+        img8 = imrotate(img8,180); % ONLY IF REVERSED
+
         allSegData(sliceIdx).img8 = img8;
         allSegData(sliceIdx).seg_mask = seg_mask;
         
@@ -297,7 +313,7 @@ for dataIdx = 3 %1:size(dataSets,1)
     end
     
     %% generate and export segmentation
-    segData = uint8(zeros(512,512, length(allSegData) ));
+    segData = uint8(zeros(dinf.Width,dinf.Height, length(allSegData) ));
     for i = 1:length(allSegData)
         segData(:,:,i) = allSegData(i).seg_mask;  % NOT TRANSPOSED YET, DO THIS LATER
     end
@@ -414,7 +430,7 @@ for dataIdx = 3 %1:size(dataSets,1)
             imshow( dispData(sliceIdx).img8_masked );
             hold on;
             axis equal;
-            plot(borderVertexPixelLocs(:,1),borderVertexPixelLocs(:,2),'-','Color',[1 1 0],'LineWidth',3);
+%             plot(borderVertexPixelLocs(:,1),borderVertexPixelLocs(:,2),'-','Color',[1 1 0],'LineWidth',3);
             title(sprintf('Labeled Slice @ z = %8.2f mm',dispData(sliceIdx).z_loc));
             drawnow;
             
